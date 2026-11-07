@@ -200,7 +200,7 @@ class ValancedXActivity : Activity() {
 
     private fun render() {
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(background)
+            setBackgroundColor(this@ValancedXActivity.background)
             clipToPadding = false
             isFillViewport = true
         }

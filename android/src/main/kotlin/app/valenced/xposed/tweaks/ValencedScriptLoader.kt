@@ -5,7 +5,7 @@ import app.valenced.xposed.manager.ModuleSettings
 import app.valenced.xposed.tweak
 import app.valenced.xposed.tweaks.base.InjectorScope
 import app.valenced.xposed.tweaks.base.registerScriptInjector
-import de.robv.android.xposed.AndroidAppHelper
+import app.valenced.xposed.tweaks.base.withAppContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Ensures that an individual Discord process loads its Hermes extension once. */
@@ -35,13 +35,13 @@ private fun runValancedXScripts(scope: InjectorScope) {
             log.i("Loading bundled ValancedX Hermes script")
             scope.runAsset(ValencedConstants.BUNDLE_ASSET)
         }
-        AndroidAppHelper.currentApplication()?.let {
-            ModuleSettings.report(it, "bundle_injected")
+        withAppContext { context ->
+            ModuleSettings.report(context, "bundle_injected")
         }
     } catch (error: Throwable) {
         log.e("ValancedX Hermes injection failed", error)
-        AndroidAppHelper.currentApplication()?.let {
-            ModuleSettings.report(it, "bundle_error", error.message)
+        withAppContext { context ->
+            ModuleSettings.report(context, "bundle_error", error.message)
         }
     }
 }
