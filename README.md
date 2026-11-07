@@ -1,4 +1,4 @@
-﻿# ValacedXposed
+# ValacedXposed
 
 Ein eigenstÃ¤ndiger Android-Xposed-Fork fÃ¼r Discord. Die installierte App heiÃŸt **ValancedX** und ist gleichzeitig Modul und Manager.
 

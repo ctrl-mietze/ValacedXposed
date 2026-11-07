@@ -1,4 +1,4 @@
-﻿name: ValacedXposed Android CI
+name: ValacedXposed Android CI
 
 on:
   push:
