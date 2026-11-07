@@ -78,8 +78,11 @@ export default async function build(dev = Dev, log = true) {
         preserveEntrySignatures: false,
         transform: {
             define: {
+                // The upstream server is not linked in ValancedX.
                 __BUILD_DISCORD_SERVER_URL__: stringEnv(
                     'VALENCED_DISCORD_SERVER_URL',
+                    undefined,
+                    false,
                 ),
                 __BUILD_SOURCE_REPOSITORY_URL__: stringEnv(
                     'VALENCED_SOURCE_REPOSITORY_URL',

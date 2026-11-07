@@ -9,7 +9,7 @@
         android:icon="@drawable/ic_valancedx"
         android:supportsRtl="true">
         <activity
-            android:name=".manager.ValancedXActivity"
+            android:name="app.valenced.xposed.manager.ValancedXActivity"
             android:label="@string/app_name"
             android:theme="@android:style/Theme.Material.NoActionBar"
             android:exported="true">
@@ -19,7 +19,7 @@
             </intent-filter>
         </activity>
         <provider
-            android:name=".manager.SettingsProvider"
+            android:name="app.valenced.xposed.manager.SettingsProvider"
             android:authorities="${applicationId}.settings"
             android:exported="true" />
         <meta-data android:name="xposedmodule" android:value="true"/>
