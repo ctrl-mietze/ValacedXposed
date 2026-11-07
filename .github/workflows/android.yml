@@ -1,4 +1,4 @@
-name: ValacedXposed Android CI
+﻿name: ValacedXposed Android CI
 
 on:
   push:
@@ -25,10 +25,10 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version-file: bundle/.dvmrc
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
       - name: Android platform
-        run: sdkmanager --install "platforms;android-37" "build-tools;37.0.0"
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install "platforms;android-37" "build-tools;37.0.0"
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Build and test
@@ -39,3 +39,4 @@ jobs:
           name: valancedx-debug-apk
           path: android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
