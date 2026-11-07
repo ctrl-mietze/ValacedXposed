@@ -1,7 +1,7 @@
 export const Setting = {
     // MAIN SETTINGS
 
-    Valenced: 'Valenced',
+    Valenced: 'ValancedX',
 
     // SUBSETTINGS
 
@@ -20,5 +20,5 @@ export const Setting = {
 } as const
 
 export const RouteNames = {
-    [Setting.Valenced]: 'Valenced',
+    [Setting.Valenced]: 'ValancedX',
 } as const

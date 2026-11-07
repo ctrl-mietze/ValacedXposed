@@ -1,11 +1,16 @@
 {
-  "id": "valenced.api.hidden",
-  "name": "Developer Mode",
-  "description": "Exposes internal Valenced APIs for debugging.",
-  "author": {
-    "name": "Valenced",
-    "links": [{ "url": "https://discord.com/invite/dtBTQHYSx4", "title": "Support Server" }]
-  },
-  "icon": "WrenchIcon",
-  "enabledByDefault": "dev"
+    "id": "valenced.api.hidden",
+    "name": "Developer Mode",
+    "description": "Exposes internal ValancedX APIs for debugging.",
+    "author": {
+        "name": "Valenced",
+        "links": [
+            {
+                "url": "https://github.com/Valenced/valenced",
+                "title": "Original source"
+            }
+        ]
+    },
+    "icon": "WrenchIcon",
+    "enabledByDefault": "dev"
 }

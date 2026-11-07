@@ -1,49 +1,45 @@
-<p align="center">
-    <img
-        width="128px"
-        src="assets/logo.svg"
-    >
-    <h1 align="center">Valenced</h1>
-    <p align="center"><strong>Supercharge your Discord experience.</strong> A client modification for Discord mobile.</p>
-    <br>
-    <div align="center">
-        <a href="https://discord.com/invite/dtBTQHYSx4">
-            <picture>
-                <source height="32px" media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/13122796/178032563-d4e084b7-244e-4358-af50-26bde6dd4996.png" />
-                <img height="32px" src="https://user-images.githubusercontent.com/13122796/178032563-d4e084b7-244e-4358-af50-26bde6dd4996.png" />
-            </picture>
-        </a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        <a href="https://github.com/Valenced">
-            <picture>
-                <source height="32px" media="(prefers-color-scheme: dark)" srcset="https://i.ibb.co/dMMmCrW/Git-Hub-Mark.png" />
-                <img height="32px" src="https://i.ibb.co/9wV3HGF/Git-Hub-Mark-Light.png" />
-            </picture>
-        </a>
-    </div>
-</p>
+# ValacedXposed
 
-## ❓ About
+Ein eigenständiger Android-Xposed-Fork für Discord. Die installierte App heißt **ValancedX** und ist gleichzeitig Modul und Manager.
 
-Valenced is a client modification for Discord mobile. This repository is a monorepo that builds Valenced.
+![ValancedX](assets/logo.svg)
 
-## ✨ Features
+## Was das Projekt macht
 
-- **🔌 Plugins**: Extend Discord with custom features
-- **🎨 Themes, fonts, icons & emojis**: Customize Discord's appearance to your liking
-- **🧪 Experiments**: Try out Discord's new features before they're rolled out
+ValancedX wird über ein kompatibles Xposed-Framework direkt in die offizielle Discord-App eingebunden. Es erstellt **keine** gepatchte Discord-APK und benötigt keinen zusätzlichen Discord-Client.
 
-## 👷 Codebase
+Der native Loader, die Plugin-Bridge und das Hermes-Bundle bilden weiterhin eine zusammengehörige technische Einheit. Die Manager-App ist neu gestaltet und arbeitet vollständig lokal. Sie bietet:
 
-Valenced uses TypeScript and Kotlin Multiplatform to share code between platforms. The codebase is split into four modules:
+- Einen Hauptschalter für die Hook-Initialisierung.
+- Eine separate Freigabe für das integrierte Hermes-Bundle.
+- Eine letzte Hook-Rückmeldung mit Zeitstempel und optionalen Fehlerdetails.
+- Discord-Schnellstart, Kopierfunktion für Diagnosen und eine kurze Xposed-Einrichtungshilfe.
+- Einen engeren Prozess-Scope, einmalige Script-Injektion und isolierte Hook-Initialisierung.
 
-- **[bundle](bundle)**: Hermes bytecode that runs inside official Discord clients. It requires the loaders to run, and is built into them in each release.
-- **[core](core)**: Shared Kotlin Multiplatform codebase for the loaders, containing the plugin system, and other shared code.
-- **[android](android)**: Android loader and native plugin API, which is an Xposed module loading the Valenced bundle into Discord.
-  - **[android/patches](android/patches)**: [Reseam](https://reseam.app) patches Valenced Manager applies to Discord to load the Xposed module.
-- **[ios](ios)**: iOS loader, which is a tweak loading the Valenced bundle into Discord.
+## Installation
 
-## 📄 License
+1. Baue oder lade eine APK aus **diesem Projekt** und installiere sie.
+2. Aktiviere ValancedX im Xposed-Manager (zum Beispiel LSPosed).
+3. Wähle `com.discord` als einzige Ziel-App.
+4. Stoppe Discord vollständig und starte es neu.
+5. Öffne ValancedX, um die letzte Rückmeldung des Hooks zu sehen.
 
-This project is licensed under the GPL-3.0 License. See [LICENSE](LICENSE) for details.
+Die Kompatibilität hängt von Discord-Version, Framework und Hermes-Bundle ab. Eine erfolgreiche Installation garantiert nicht, dass jede Discord-Version unterstützt wird. **Ein Build oder Release ist keine Zusage einer geprüften Discord-Kompatibilität.**
 
-[android/patches](android/patches) is licensed under the AGPL-3.0, see [its license](android/patches/LICENSE) and [notice](android/patches/NOTICE).
+## Build
+
+Voraussetzungen: Java 25, Android SDK 37, Deno 2.9.7 sowie ein Android-kompatibles Gradle-Setup.
+
+```bash
+./gradlew :android:assembleDebug :android:testDebugUnitTest :bundle:testBundle
+```
+
+Die APK entsteht unter `android/build/outputs/apk/debug/`. Release-Versionen erhalten später eine eigene Signierung.
+
+## Herkunft und Lizenz
+
+Dieses Projekt basiert auf [Valenced/valenced](https://github.com/Valenced/valenced). Der verwendete Quellcode bleibt unter der GNU General Public License v3.0; die ursprünglichen Rechte und Lizenzen sind in den entsprechenden Lizenzdateien erhalten.
+
+Name, Logo, Manager-Oberfläche, Projektbeschreibung und die hier beschriebenen Ergänzungen wurden eigens für ValacedXposed erstellt. Das Projekt ist nicht offiziell mit Discord oder Valenced verbunden.
+
+Weitere technische Einzelheiten: [Architektur](docs/ARCHITECTURE.md) · [Kompatibilität und Diagnose](docs/COMPATIBILITY.md)

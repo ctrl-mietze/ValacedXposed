@@ -6,6 +6,7 @@ import de.robv.android.xposed.XposedBridge
 import app.valenced.xposed.*
 import java.lang.reflect.Method
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 lateinit var resources: XModuleResources
 
@@ -51,6 +52,7 @@ class InjectorScope internal constructor(
 }
 
 private val injectors = CopyOnWriteArrayList<ScriptInjector>()
+private val injectorStarted = AtomicBoolean(false)
 
 /**
  * Register a [ScriptInjector] to be invoked by the [scriptLoader] tweak before the host app's bundle is loaded.
@@ -142,6 +144,8 @@ fun HookScope.runInjectors(
     loadScriptFromAssets: Method,
     loadScriptFromFile: Method,
 ) {
+    // React Native may call both loader methods; running the bundle twice corrupts Metro.
+    if (!injectorStarted.compareAndSet(false, true)) return
     val scope = InjectorScope(tweak, this, loadScriptFromAssets, loadScriptFromFile)
     for (injector in injectors) {
         try {

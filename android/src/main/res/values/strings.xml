@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">Valenced</string>
+    <string name="app_name">ValancedX</string>
+    <string name="xposed_description">ValacedXposed: native Erweiterungen für die offizielle Discord-App. Nur Xposed, ohne APK-Patcher.</string>
 </resources>

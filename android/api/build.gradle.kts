@@ -42,7 +42,7 @@ dependencies {
 }
 
 // Forks publish to their own repository's packages.
-val githubRepository = providers.environmentVariable("GITHUB_REPOSITORY").getOrElse("Valenced/valenced")
+val githubRepository = providers.environmentVariable("GITHUB_REPOSITORY").getOrElse("ctrl-mietze/ValacedXposed")
 
 publishing {
     publications {
@@ -56,8 +56,8 @@ publishing {
             }
 
             pom {
-                name = "Valenced API"
-                description = "API for building native Valenced plugins"
+                name = "ValancedX Native API"
+                description = "Native plugin API used by the ValacedXposed Xposed loader"
                 url = "https://github.com/$githubRepository"
 
                 licenses {

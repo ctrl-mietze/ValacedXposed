@@ -1,25 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          xmlns:tools="http://schemas.android.com/tools">
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.discord" />
+    </queries>
     <application
-            android:allowBackup="true"
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_valancedx"
+        android:supportsRtl="true">
+        <activity
+            android:name=".manager.ValancedXActivity"
             android:label="@string/app_name"
-            android:supportsRtl="true"
-            tools:targetApi="31"
-    >
-        <meta-data
-                android:name="xposedmodule"
-                android:value="true"/>
-        <meta-data
-                android:name="xposeddescription"
-                android:value="⚛️ Supercharge your Discord experience. Valenced is a client modification for Discord mobile."/>
-        <meta-data
-                android:name="xposedminversion"
-                android:value="82"/>
-        <meta-data
-                android:name="xposedscope"
-                android:value="com.discord"
-        />
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <provider
+            android:name=".manager.SettingsProvider"
+            android:authorities="${applicationId}.settings"
+            android:exported="true" />
+        <meta-data android:name="xposedmodule" android:value="true"/>
+        <meta-data android:name="xposeddescription" android:resource="@string/xposed_description"/>
+        <meta-data android:name="xposedminversion" android:value="82"/>
+        <meta-data android:name="xposedscope" android:value="com.discord"/>
     </application>
 </manifest>

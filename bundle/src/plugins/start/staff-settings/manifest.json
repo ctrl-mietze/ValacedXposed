@@ -1,11 +1,16 @@
 {
-  "id": "valenced.staff-settings",
-  "name": "Staff Settings",
-  "description": "Allows accessing Discord's Staff Settings.",
-  "author": {
-    "name": "Valenced",
-    "links": [{ "url": "https://discord.com/invite/dtBTQHYSx4", "title": "Support Server" }]
-  },
-  "icon": "StaffBadgeIcon",
-  "enabledByDefault": true
+    "id": "valenced.staff-settings",
+    "name": "Staff Settings",
+    "description": "Allows accessing Discord's Staff Settings.",
+    "author": {
+        "name": "Valenced",
+        "links": [
+            {
+                "url": "https://github.com/Valenced/valenced",
+                "title": "Original source"
+            }
+        ]
+    },
+    "icon": "StaffBadgeIcon",
+    "enabledByDefault": true
 }

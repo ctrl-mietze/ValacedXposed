@@ -1,14 +1,19 @@
 {
-  "id": "valenced.logging",
-  "name": "Logging",
-  "description": "Logs assisting Valenced developers.",
-  "author": {
-    "name": "Valenced",
-    "links": [{ "url": "https://discord.com/invite/dtBTQHYSx4", "title": "Support Server" }]
-  },
-  "icon": "PaperIcon",
-  "enabledByDefault": true,
-  "build": {
-    "devOnly": true
-  }
+    "id": "valenced.logging",
+    "name": "Logging",
+    "description": "Logs assisting ValancedX developers.",
+    "author": {
+        "name": "Valenced",
+        "links": [
+            {
+                "url": "https://github.com/Valenced/valenced",
+                "title": "Original source"
+            }
+        ]
+    },
+    "icon": "PaperIcon",
+    "enabledByDefault": true,
+    "build": {
+        "devOnly": true
+    }
 }

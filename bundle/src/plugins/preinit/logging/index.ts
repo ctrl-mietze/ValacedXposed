@@ -28,7 +28,7 @@ if (__DEV__) {
                 performance.now() - tsInit,
             )
             logger.log(
-                `✨ Valenced. Supercharge your Discord experience. (${FullVersion} (${BuildEnvironment}))`,
+                `ValancedX · Xposed enhancements ready. (${FullVersion} (${BuildEnvironment}))`,
             )
         },
     })

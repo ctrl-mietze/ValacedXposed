@@ -1,14 +1,19 @@
 {
-  "id": "valenced.recovery",
-  "name": "Recovery",
-  "description": "Handles errors and provides troubleshooting options for Valenced.",
-  "author": {
-    "name": "Valenced",
-    "links": [{ "url": "https://discord.com/invite/dtBTQHYSx4", "title": "Support Server" }]
-  },
-  "icon": "ShieldIcon",
-  "essential": true,
-  "dependencies": {
-    "valenced.settings": {}
-  }
+    "id": "valenced.recovery",
+    "name": "Recovery",
+    "description": "Handles errors and provides troubleshooting options for ValancedX.",
+    "author": {
+        "name": "Valenced",
+        "links": [
+            {
+                "url": "https://github.com/Valenced/valenced",
+                "title": "Original source"
+            }
+        ]
+    },
+    "icon": "ShieldIcon",
+    "essential": true,
+    "dependencies": {
+        "valenced.settings": {}
+    }
 }

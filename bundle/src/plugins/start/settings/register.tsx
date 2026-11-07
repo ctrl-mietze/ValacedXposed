@@ -9,7 +9,6 @@ import ReactNativeVersionSetting from './definitions/ReactNativeVersionSetting'
 import ReactVersionSetting from './definitions/ReactVersionSetting'
 import ReloadSetting from './definitions/ReloadSetting'
 import ValencedDeveloperModeSetting from './definitions/ValencedDeveloperModeSetting'
-import ValencedDiscordSetting from './definitions/ValencedDiscordSetting'
 import ValencedLicenseSetting from './definitions/ValencedLicenseSetting'
 import ValencedSetting from './definitions/ValencedSetting'
 import ValencedSourceRepositorySetting from './definitions/ValencedSourceRepositorySetting'
@@ -19,7 +18,6 @@ registerSettingsItems({
     [Setting.Valenced]: ValencedSetting,
     [Setting.ValencedSourceRepository]: ValencedSourceRepositorySetting,
     [Setting.ValencedLicense]: ValencedLicenseSetting,
-    [Setting.ValencedDiscord]: ValencedDiscordSetting,
     [Setting.Reload]: ReloadSetting,
     [Setting.ValencedDeveloperMode]: ValencedDeveloperModeSetting,
     [Setting.ValencedVersion]: ValencedVersionSetting,
@@ -30,6 +28,6 @@ registerSettingsItems({
 })
 
 registerSettingsSection('VALENCED', {
-    label: 'Valenced',
+    label: 'ValancedX',
     settings: [Setting.Valenced],
 })

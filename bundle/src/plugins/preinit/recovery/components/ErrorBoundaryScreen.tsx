@@ -67,7 +67,7 @@ export default function ErrorBoundaryScreen({
                 <Text variant="display-lg">Error!</Text>
                 <Text variant="text-md/normal">
                     An error was thrown while rendering components. This could
-                    be caused by plugins, Valenced or Discord.
+                    be caused by plugins, ValancedX or Discord.
                 </Text>
                 <Text variant="text-sm/semibold" color="text-muted">
                     {Client.Version} ({Client.Build}) • RN {getRNVersion()} •{' '}
@@ -243,7 +243,7 @@ function parseStackTrace(stackTrace: string): StackFrame[] {
                     path = 'Discord'
                     break
                 case ValencedFilePath:
-                    path = 'Valenced'
+                    path = 'ValancedX'
                     break
             }
 

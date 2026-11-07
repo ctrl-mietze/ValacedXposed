@@ -15,7 +15,7 @@ const ValencedEnterRecoveryModeSetting: SettingsItem = {
     useDescription: () =>
         isDefaultsOnlyBoot
             ? 'Currently in Recovery Mode. Reload to exit.'
-            : 'Run Valenced with default plugins only for one boot. Use if plugins are causing issues.',
+            : 'Start once with bundled plugins only. Useful when a third-party plugin misbehaves.',
     IconComponent: () => <TableRowAssetIcon name="ShieldIcon" />,
     onPress: () => {
         requestNextBootDefaultsOnly()

@@ -1,12 +1,17 @@
 {
-  "id": "valenced.api",
-  "name": "Plugin API",
-  "description": "Provides the Valenced plugin API.",
-  "author": {
-    "name": "Valenced",
-    "links": [{ "url": "https://discord.com/invite/dtBTQHYSx4", "title": "Support Server" }]
-  },
-  "icon": "PollsIcon",
-  "essential": true,
-  "api": true
+    "id": "valenced.api",
+    "name": "Plugin API",
+    "description": "Provides the ValancedX plugin API.",
+    "author": {
+        "name": "Valenced",
+        "links": [
+            {
+                "url": "https://github.com/Valenced/valenced",
+                "title": "Original source"
+            }
+        ]
+    },
+    "icon": "PollsIcon",
+    "essential": true,
+    "api": true
 }

@@ -14,11 +14,11 @@ android {
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "app.valenced.xposed"
+        applicationId = "ctrl.mietze.valacedxposed"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 10300
-        versionName = "1.3.0"
+        versionCode = 1
+        versionName = "0.1.0"
     }
 
     sourceSets {

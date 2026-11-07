@@ -1,40 +1,47 @@
 package app.valenced.xposed.tweaks
 
 import app.valenced.xposed.ValencedConstants
+import app.valenced.xposed.manager.ModuleSettings
 import app.valenced.xposed.tweak
 import app.valenced.xposed.tweaks.base.InjectorScope
 import app.valenced.xposed.tweaks.base.registerScriptInjector
+import de.robv.android.xposed.AndroidAppHelper
+import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Loads the Valenced bundle shipped in this module's APK. Depends on [app.valenced.xposed.tweaks.base.scriptLoader].
- *
- * Debug builds can run preloads and a development bundle from [DevLoader] instead.
- */
+/** Ensures that an individual Discord process loads its Hermes extension once. */
+private val bundleAttempted = AtomicBoolean(false)
+
 val valencedScriptLoader by tweak {
     registerScriptInjector { scope: InjectorScope ->
-        runValencedScripts(scope)
+        runValancedXScripts(scope)
     }
 }
 
-private fun runValencedScripts(scope: InjectorScope) {
+private fun runValancedXScripts(scope: InjectorScope) {
+    if (!bundleAttempted.compareAndSet(false, true)) return
     val log = scope.tweakLog
-    log.i("Running Valenced scripts...")
 
     try {
         val devBundle = DevLoader.awaitBundle()
-
-        for (f in DevLoader.preloads()) {
-            log.d("Running preload: ${f.absolutePath}")
-            scope.runFile(f.absolutePath)
+        for (preload in DevLoader.preloads()) {
+            log.d("Loading development preload: " + preload.name)
+            scope.runFile(preload.absolutePath)
         }
 
         if (devBundle != null) {
-            log.i("Loading development bundle: ${devBundle.absolutePath}")
+            log.i("Loading local development bundle")
             scope.runFile(devBundle.absolutePath)
         } else {
+            log.i("Loading bundled ValancedX Hermes script")
             scope.runAsset(ValencedConstants.BUNDLE_ASSET)
         }
-    } catch (e: Throwable) {
-        log.e("Unable to run Valenced scripts", e)
+        AndroidAppHelper.currentApplication()?.let {
+            ModuleSettings.report(it, "bundle_injected")
+        }
+    } catch (error: Throwable) {
+        log.e("ValancedX Hermes injection failed", error)
+        AndroidAppHelper.currentApplication()?.let {
+            ModuleSettings.report(it, "bundle_error", error.message)
+        }
     }
 }
