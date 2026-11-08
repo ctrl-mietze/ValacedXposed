@@ -247,7 +247,7 @@ class ValancedXActivity : Activity() {
                 this,
                 label(
                     if (prefs.getLong("last_time", 0L) == 0L)
-                        "Keine Xposed-Injektion bestätigt. Prüfe, ob ein kompatibles LSPosed-Framework aktiv ist und com.discord im Scope liegt. LSPatch allein lädt keine Hooks in die unveränderte Discord-App."
+                        "Kein Status aus Discord empfangen. Schau in den LSPosed-Framework-Logs nach ValancedX und prüfe den Discord-Scope. Der native Loader versucht die Hooks jetzt bereits beim Paketladeereignis zu registrieren."
                     else
                         "Status basiert auf beobachteten Ereignissen, nicht auf einem permanenten Live-Test.",
                     12f, mutedColor,
@@ -277,11 +277,11 @@ class ValancedXActivity : Activity() {
     private fun modules(parent: LinearLayout) {
         heading(parent, "Hook-Konfiguration")
         card(parent) {
-            setting(this, "Xposed-Hook", "Startet ausschließlich im Discord-Hauptprozess.", "hook_enabled", true)
+            setting(this, "ValancedX-Erweiterungen", "Steuert die Hermes-Injektion. Der native Xposed-Hook wird früh registriert.", "hook_enabled", true)
             line(this)
-            setting(this, "Hermes-Integration", "Lädt die native Bridge und das integrierte Bundle.", "javascript_enabled", true)
+            setting(this, "Hermes-Bundle", "Lädt den ValancedX-Code vor Discords eigener JavaScript-Datei.", "javascript_enabled", true)
             line(this)
-            setting(this, "Recovery-Modus", "Deaktiviert sämtliche optionalen Hooks beim nächsten Start.", "safe_mode", false)
+            setting(this, "Recovery-Modus", "Verhindert das Hermes-Bundle; die frühe native Hook-Registrierung bleibt erhalten.", "safe_mode", false)
         }
         if (prefs.getBoolean("auto_recovery", false)) {
             card(parent, tint = Color.rgb(45, 32, 40)) {
@@ -477,11 +477,11 @@ class ValancedXActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Xposed-Einrichtung")
             .setMessage(
-                "1. Ein auf deiner Android-Version funktionierendes systemweites LSPosed/Xposed-Framework aktivieren. LSPatch alleine reicht für eine unveränderte Discord-App nicht aus.\n\n" +
+                "1. Im bereits installierten LSPosed-Modulmanager ValancedX öffnen.\n\n" +
                 "2. ValancedX im Framework aktivieren.\n\n" +
                 "3. Ausschließlich com.discord als Scope wählen.\n\n" +
                 "4. Discord vollständig stoppen und neu starten.\n\n" +
-                "5. Unter Diagnose den Hook-Status prüfen.\n\n" +
+                "5. Unter Diagnose den Hook-Status prüfen. Wenn nichts erscheint, die LSPosed-Framework-Logs nach ValancedX durchsuchen.\n\n" +
                 "Bei Problemen Recovery aktivieren. Es werden keine Discord-APKs gepatcht.",
             )
             .setPositiveButton("Fertig", null)

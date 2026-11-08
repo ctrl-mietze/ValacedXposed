@@ -1,64 +1,59 @@
 # ValacedXposed
 
-Ein eigenständiger Open-Source-Fork mit einer **Xposed-Erweiterung für den offiziellen Discord-Client** und dem nativen Android-Manager **ValancedX**.
+Eigenständiger Android-Xposed-Fork auf Basis von **Valenced**, mit der Manager-App **ValancedX**.
 
 ![ValancedX](assets/logo.svg)
 
-## ValancedX 1.0.0
+## ValancedX 1.0.2 – Original-Xposed-Start wiederhergestellt
 
-ValancedX wird als normale Android-APK installiert. Mit einem kompatiblen Xposed-/LSPosed-Framework bindet sich das Modul ausschließlich in den Hauptprozess von `com.discord` ein. Die offizielle Discord-App bleibt unverändert; es wird **keine Discord-APK gepatcht**.
+ValancedX erweitert die **offizielle Discord-App** über ein kompatibles Xposed-/LSPosed-Framework. Es gibt keinen Discord-APK-Patcher und keine zweite Discord-App.
 
-### Manager
+Die native Architektur basiert weiterhin auf [Valenced/valenced](https://github.com/Valenced/valenced). Der entscheidende Startpfad wird **nicht** durch einen eigenen Application-Callback ersetzt: `handleLoadPackage` initialisiert DexFinder, registriert die nativen Tweaks in der ursprünglichen Reihenfolge und gibt DexFinder danach wieder frei. Das geschieht **vor** Discords Application-Start und vor dem React-Native-/Hermes-Bundle.
 
-- Moderne dunkle Oberfläche mit **Start**, **Module**, **Diagnose** und **Info**.
-- Konfiguration von Xposed-Hook, Hermes-Bundle und Recovery.
-- Statusanzeige auf Basis der letzten tatsächlich empfangenen Meldung.
-- Zähler für Startversuche, gemeldete Fehler und ausgeführte Bundle-Ladungen.
-- Lokale Timeline (maximal 32 Ereignisse) mit abschaltbarer Historie.
-- Diagnosebericht manuell kopieren oder teilen; Fehlerdetails optional.
-- Einrichtungsassistent und direkter Discord-Schnellstart.
+### Was der Manager kann
 
-### Zuverlässigkeit
+- Eigene dunkle Oberfläche mit Start, Module, Diagnose und Info.
+- Steuerung der Hermes-/JavaScript-Injektion sowie Recovery, die das Hermes-Bundle verhindert, während der native Xposed-Bootstrap registriert bleibt.
+- Lokale Hook-Ereignisse mit Zeitstempel, Zähler und bis zu 32 Verlaufseinträgen.
+- Fehlerdetails optional, Diagnose manuell kopieren/teilen, ohne eigenes Telemetrie-Backend.
+- Klassischer Xposed-Entrypoint, kompatible Bridge-IDs und interner Plugin-/Theme-Core.
+- Kein alternatives Hook-Framework, keine manipulierte Discord-Installation.
 
-Der Hook wird nur in `com.discord` im Hauptprozess initialisiert. Eine fehlerhafte oder nicht erreichbare Manager-Konfiguration wird nicht als Freigabe interpretiert. Recovery und Minimalmodus verhindern das Laden aller optionalen Discord-Hooks.
+### Warum 1.0.2?
 
-Doppelte Hermes-Injektionen werden pro Prozess unterbunden. Die Registrierung des React-Native-Loaders wird separat verfolgt. Nach drei **tatsächlich gemeldeten** Boot-/Hermes-Fehlern in Folge schaltet die Manager-Konfiguration automatisch in den Recovery-Modus; das ist kein allgemeines Crash-Detection-System.
+Die erste eigene Manager-Integration hatte den nativen Bootstrap bis zum Android-`Application.attach` verzögert. Das ist für früh registrierte React-Native-Hooks ungünstig. **1.0.2 stellt Valenceds frühe Initialisierung wieder her.** Die beiden Android-Lifecycle-Fallbacks dienen nur noch dazu, den App-Context für Diagnose und Manager-Einstellungen zu bekommen.
 
-Die vorhandenen Plugin- und Hermes-ABI-Schnittstellen bleiben intern zur ursprünglichen Implementierung kompatibel.
+Die Manager-Konfiguration wird **nach** der frühen Hook-Registrierung abgefragt. Sie schaltet die Hermes-Injektion unmittelbar vor Discords Skriptladevorgang frei oder aus. Ist die Manager-IPC vorübergehend nicht erreichbar, wird die explizite LSPosed-Scope-Aktivierung als Standard verwendet und eine Warnung protokolliert.
 
-## Fehlerbehebung: Discord startet, aber kein Hook erscheint
+### Installation und Updates
 
-ValancedX **1.0.1** enthält zusätzliche Android-Lifecycle-Fallbacks und eigene Diagnosestatus für die Xposed-Initialisierung. Bleibt die Rückmeldung vollständig aus, prüfe zuerst, ob ein Android-kompatibles systemweites **LSPosed-/Xposed-Framework aktiv** und **ValancedX für `com.discord` im Scope** freigeschaltet ist. Eine bloße LSPatch-Installation reicht für die unveränderte offizielle Discord-App nicht aus. Mehr dazu unter [Hook-Startdiagnose](docs/HOOK_STARTUP.md).
+1. Die [aktuelle signierte APK](https://github.com/ctrl-mietze/ValacedXposed/releases/latest) installieren. 1.0.2 aktualisiert das vorhandene 1.0.1 ohne Signaturwechsel.
+2. ValancedX im vorhandenen Xposed-/LSPosed-Modulmanager aktivieren und ausschließlich `com.discord` in den Scope nehmen.
+3. Discord vollständig schließen und neu starten.
+4. In ValancedX unter **Diagnose** die letzte Meldung ansehen. Relevante Stufen: Xposed-Einstieg, native Hooks registriert und Hermes-Bundle geladen.
 
-## Installation
+Bei einer noch installierten **0.1.0-Alpha-Debug-App** deren separates Modul zuvor deaktivieren, damit es nicht zu doppelten Hooks kommt.
 
-1. Falls die alte Alpha-Debug-App installiert ist: Dieses Xposed-Modul zuerst deaktivieren oder deinstallieren, damit keine doppelten Hooks entstehen.
-2. Die eigene, signierte **ValancedX 1.0.0 Release-APK** über [GitHub Releases](https://github.com/ctrl-mietze/ValacedXposed/releases) beziehen.
-3. Die APK installieren und ValancedX im Xposed-Framework aktivieren.
-4. Ausschließlich `com.discord` als Scope auswählen.
-5. Discord vollständig beenden und neu starten.
-6. Unter Diagnose die lokale Hook-Rückmeldung prüfen.
+Das Projekt verwendet weiterhin die **Legacy-Xposed-API** (XposedBridge, `assets/xposed_init`), passend zur ursprünglichen Valenced-Implementierung. Ein Umbau auf die moderne libxposed-API wäre ein eigenes Projekt und ist nicht Bestandteil dieses Updates.
 
-### Kompatibilität
+### Tests und Grenzen
 
-Builds und Unit-Tests laufen automatisch über GitHub Actions. Ein erfolgreicher Build beweist nicht die Kompatibilität mit allen Discord-/React-Native-/Hermes-Versionen. Praktische Gerätetests sind separat erforderlich. Es gibt keine Aussage über alle LSPosed-Forks oder Root-Frameworks.
+Automatisiert werden der Android-Build, die Unit-Tests und der Hermes-Bundle-Build geprüft. Ein grüner CI-Build beweist **nicht**, dass eine konkrete Discord-/LSPosed-Version erfolgreich injiziert. Prüfe nach einem Update den tatsächlichen Status im Discord-Prozess beziehungsweise die Framework-Logs.
 
-## Für Entwickler
+Das Modul verändert keine Discord-Zugangsdaten. Es ist kein offizielles Discord-Produkt.
 
-Benötigt werden Java 25, Android SDK 36 und Deno 2.9.7.
+## Entwickeln
+
+Java 25, Android SDK 36, Deno 2.9.7:
 
 ```bash
-./gradlew :android:assembleDebug :android:assembleRelease :android:testDebugUnitTest :bundle:testBundle
+./gradlew :android:assembleDebug :android:testDebugUnitTest :bundle:testBundle
 ```
 
-Die Release-Signatur wird bei der offiziellen CI über verschlüsselte GitHub-Repository-Secrets bereitgestellt. Keystore-Dateien und Kennwörter dürfen nie dem öffentlichen Repository hinzugefügt werden.
+Release-Builds werden getrennt mit dem bestehenden Projektschlüssel signiert, der nicht im Repository gespeichert ist.
 
-Der Release-Build enthält nur das zur APK gehörende Hermes-Bundle. Die Debug-spezifische Development-Bundle-Funktion ist nicht im Release-Loader aktiv.
+## Lizenz und Herkunft
 
-## Herkunft und Lizenz
+Fork von [Valenced/valenced](https://github.com/Valenced/valenced), **GNU GPL-3.0**. Die ursprünglichen Lizenztexte und Credits bleiben erhalten. Branding, Manager-UI und Ergänzungen stammen aus ValacedXposed.
 
-[Valenced/valenced](https://github.com/Valenced/valenced) ist die Ausgangsbasis. Der geänderte Quellcode verbleibt unter der **GNU GPL-3.0** und enthält die weiterhin erforderlichen Lizenz- und Herkunftshinweise. Logo, Release-Texte, neue Manager-Oberfläche und projektbezogene Ergänzungen von ValacedXposed wurden eigenständig erstellt.
-
-ValacedXposed ist kein offizielles Discord-Projekt und steht nicht in offizieller Verbindung zu Discord.
-
-[Architektur](docs/ARCHITECTURE.md) · [Kompatibilität und Diagnose](docs/COMPATIBILITY.md) · [Release 1.0.0](docs/RELEASE_1.0.0.md)
+[Android-Hook-Start](docs/HOOK_STARTUP.md) · [Version 1.0.2](docs/RELEASE_1.0.2.md) · [Releases](https://github.com/ctrl-mietze/ValacedXposed/releases)
