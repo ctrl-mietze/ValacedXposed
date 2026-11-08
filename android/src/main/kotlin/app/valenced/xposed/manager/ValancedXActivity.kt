@@ -166,6 +166,8 @@ class ValancedXActivity : Activity() {
     private fun statusLabel(value: String = state()): String = when (value) {
         "bundle_injected" -> "Hermes-Bundle zuletzt geladen"
         "hooks_ready" -> "Hooks zuletzt registriert"
+        "framework_attached" -> "Xposed-Einstieg erkannt"
+        "module_path_missing" -> "Modul-Dateipfad nicht gefunden"
         "script_loader_missing" -> "React-Native-Loader nicht gefunden"
         "native_only" -> "Minimalmodus aktiv"
         "safe_mode" -> "Recovery-Modus aktiv"
@@ -178,8 +180,8 @@ class ValancedXActivity : Activity() {
 
     private fun stateColor(): Int = when (state()) {
         "bundle_injected" -> mintColor
-        "hooks_ready" -> accentColor
-        "script_loader_missing", "bundle_error", "bootstrap_error" -> errorColor
+        "hooks_ready", "framework_attached" -> accentColor
+        "script_loader_missing", "bundle_error", "bootstrap_error", "module_path_missing" -> errorColor
         "safe_mode", "native_only" -> warmColor
         else -> mutedColor
     }
@@ -243,7 +245,13 @@ class ValancedXActivity : Activity() {
             )
             add(
                 this,
-                label("Status basiert auf beobachteten Ereignissen, nicht auf einem permanenten Live-Test.", 12f, mutedColor),
+                label(
+                    if (prefs.getLong("last_time", 0L) == 0L)
+                        "Keine Xposed-Injektion bestätigt. Prüfe, ob ein kompatibles LSPosed-Framework aktiv ist und com.discord im Scope liegt. LSPatch allein lädt keine Hooks in die unveränderte Discord-App."
+                    else
+                        "Status basiert auf beobachteten Ereignissen, nicht auf einem permanenten Live-Test.",
+                    12f, mutedColor,
+                ),
                 top = 9,
             )
         }
@@ -469,7 +477,7 @@ class ValancedXActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Xposed-Einrichtung")
             .setMessage(
-                "1. Ein kompatibles Xposed-Framework bereitstellen.\n\n" +
+                "1. Ein auf deiner Android-Version funktionierendes systemweites LSPosed/Xposed-Framework aktivieren. LSPatch alleine reicht für eine unveränderte Discord-App nicht aus.\n\n" +
                 "2. ValancedX im Framework aktivieren.\n\n" +
                 "3. Ausschließlich com.discord als Scope wählen.\n\n" +
                 "4. Discord vollständig stoppen und neu starten.\n\n" +

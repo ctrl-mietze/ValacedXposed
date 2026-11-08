@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Bundle
 import app.valenced.xposed.Tweak
+import app.valenced.xposed.api.HostScope
 import app.valenced.xposed.hook
 import app.valenced.xposed.method
 import app.valenced.xposed.tweak
@@ -42,6 +43,16 @@ val lifecycleSupport by tweak {
     attachBaseContext.hook {
         after { onContext(thisObject as Context) }
     }
+}
+
+/**
+ * Backup entrypoint for newer Android / Discord builds where the
+ * attachBaseContext method is inlined, renamed or never reached.
+ * Uses the same subscriber queue as the primary lifecycle hook.
+ */
+fun notifyContextFallback(ctx: Context, scope: HostScope) {
+    if (contextRef.get() != null) return
+    Tweak("lifecycleFallback", scope).onContext(ctx)
 }
 
 private fun Tweak.onContext(ctx: Context) {

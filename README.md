@@ -26,6 +26,10 @@ Doppelte Hermes-Injektionen werden pro Prozess unterbunden. Die Registrierung de
 
 Die vorhandenen Plugin- und Hermes-ABI-Schnittstellen bleiben intern zur ursprünglichen Implementierung kompatibel.
 
+## Fehlerbehebung: Discord startet, aber kein Hook erscheint
+
+ValancedX **1.0.1** enthält zusätzliche Android-Lifecycle-Fallbacks und eigene Diagnosestatus für die Xposed-Initialisierung. Bleibt die Rückmeldung vollständig aus, prüfe zuerst, ob ein Android-kompatibles systemweites **LSPosed-/Xposed-Framework aktiv** und **ValancedX für `com.discord` im Scope** freigeschaltet ist. Eine bloße LSPatch-Installation reicht für die unveränderte offizielle Discord-App nicht aus. Mehr dazu unter [Hook-Startdiagnose](docs/HOOK_STARTUP.md).
+
 ## Installation
 
 1. Falls die alte Alpha-Debug-App installiert ist: Dieses Xposed-Modul zuerst deaktivieren oder deinstallieren, damit keine doppelten Hooks entstehen.

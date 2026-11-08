@@ -1,8 +1,11 @@
 package app.valenced.xposed
 
 import android.app.Activity
+import android.app.Application
+import android.app.Instrumentation
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.util.Log
 import app.valenced.bridge.ValencedBridge
 import app.valenced.xposed.api.HostScope
 import app.valenced.xposed.manager.HookMode
@@ -10,6 +13,7 @@ import app.valenced.xposed.manager.HookPolicy
 import app.valenced.xposed.manager.ModuleSettings
 import app.valenced.xposed.tweaks.*
 import app.valenced.xposed.tweaks.base.lifecycleSupport
+import app.valenced.xposed.tweaks.base.notifyContextFallback
 import app.valenced.xposed.tweaks.base.scriptLoader
 import app.valenced.xposed.tweaks.base.scriptLoaderInstalled
 import app.valenced.xposed.tweaks.bridge.ValencedBridgeRegistry
@@ -23,22 +27,25 @@ import app.valenced.xposed.tweaks.plugins.repos.pluginRepos
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.IXposedHookZygoteInit
 import de.robv.android.xposed.XposedBridge
+import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-private lateinit var modulePath: String
+/** Set by a compatible Xposed / LSPosed runtime. */
+@Volatile
+private var modulePath: String? = null
 
 /**
- * Discord-only Xposed entrypoint.
- *
- * The loader is kept ABI-compatible with the upstream Hermes bundle.
- * All controls are read from the separately installed ValancedX manager.
+ * Discord-only Xposed startup, with two independent Application lifecycle
+ * fallbacks. The official Discord APK is never modified by this module.
  */
 @Suppress("UNUSED")
 class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
     companion object {
-        private val attached = AtomicBoolean(false)
+        private val packageSeen = AtomicBoolean(false)
         private val initialized = AtomicBoolean(false)
+        private const val MODULE_PACKAGE = "ctrl.mietze.valacedxposed"
     }
 
     private val runtime: List<TweakSpec> = listOf(
@@ -67,63 +74,121 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
     override fun handleLoadPackage(param: XC_LoadPackage.LoadPackageParam) {
         if (param.packageName != ValencedConstants.TARGET_PACKAGE) return
         if (param.processName != ValencedConstants.TARGET_PACKAGE) return
-        if (!attached.compareAndSet(false, true)) return
-        if (!::modulePath.isInitialized) {
-            XposedBridge.log("ValancedX: Xposed module path missing")
+        if (!packageSeen.compareAndSet(false, true)) return
+
+        reportToLog("Xposed reached Discord main process; registering lifecycle callbacks")
+        val earlyScope = HostScopeImpl(
+            modulePath.orEmpty(),
+            param.appInfo,
+            param.classLoader,
+        )
+
+        runCatching {
+            XposedHelpers.findAndHookMethod(
+                Application::class.java,
+                "attach",
+                Context::class.java,
+                methodHook {
+                    after {
+                        val app = thisObject as? Application ?: return@after
+                        if (app.packageName != ValencedConstants.TARGET_PACKAGE) return@after
+                        notifyContextFallback(app, earlyScope)
+                    }
+                }.build(),
+            )
+            reportToLog("Application.attach fallback registered")
+        }.onFailure { reportToLog("Application.attach fallback failed", it) }
+
+        runCatching {
+            XposedHelpers.findAndHookMethod(
+                Instrumentation::class.java,
+                "callApplicationOnCreate",
+                Application::class.java,
+                methodHook {
+                    before {
+                        val app = args.firstOrNull() as? Application ?: return@before
+                        if (app.packageName != ValencedConstants.TARGET_PACKAGE) return@before
+                        notifyContextFallback(app, earlyScope)
+                    }
+                }.build(),
+            )
+            reportToLog("Application.onCreate fallback registered")
+        }.onFailure { reportToLog("Application.onCreate fallback failed", it) }
+
+        lifecycleSupport.applyTo(earlyScope)
+        earlyScope.withAppContext { hostContext ->
+            if (!initialized.compareAndSet(false, true)) return@withAppContext
+            bootstrap(hostContext, param)
+        }
+    }
+
+    private fun bootstrap(
+        hostContext: Context,
+        param: XC_LoadPackage.LoadPackageParam,
+    ) {
+        reportToLog("Discord Application Context acquired")
+        ModuleSettings.report(hostContext, "framework_attached")
+
+        val config = ModuleSettings.read(hostContext)
+        when (HookPolicy.resolve(config.enabled, config.javascriptEnabled, config.safeMode)) {
+            HookMode.OFF -> {
+                ModuleSettings.report(hostContext, "disabled")
+                return
+            }
+            HookMode.RECOVERY -> {
+                ModuleSettings.report(hostContext, "safe_mode")
+                return
+            }
+            HookMode.MINIMAL -> {
+                ModuleSettings.report(hostContext, "native_only")
+                return
+            }
+            HookMode.FULL -> Unit
+        }
+
+        val path = findModuleApk(hostContext)
+        if (path == null) {
+            reportToLog("Module APK path unavailable")
+            ModuleSettings.report(hostContext, "module_path_missing")
             return
         }
 
-        val scope = HostScopeImpl(
-            modulePath = modulePath,
-            appInfo = param.appInfo,
-            classLoader = param.classLoader,
-        )
-
-        // Minimal lifecycle hook always runs so the manager can receive
-        // a status, even when safe mode disables all optional integrations.
-        lifecycleSupport.applyTo(scope)
-        scope.withAppContext { hostContext ->
-            if (!initialized.compareAndSet(false, true)) return@withAppContext
-
-            val config = ModuleSettings.read(hostContext)
-            when (HookPolicy.resolve(config.enabled, config.javascriptEnabled, config.safeMode)) {
-                HookMode.OFF -> {
-                    ModuleSettings.report(hostContext, "disabled")
-                    return@withAppContext
-                }
-                HookMode.RECOVERY -> {
-                    ModuleSettings.report(hostContext, "safe_mode")
-                    return@withAppContext
-                }
-                HookMode.MINIMAL -> {
-                    ModuleSettings.report(hostContext, "native_only")
-                    return@withAppContext
-                }
-                HookMode.FULL -> Unit
+        val scope = HostScopeImpl(path, param.appInfo, param.classLoader)
+        ModuleSettings.report(hostContext, "initializing")
+        reportToLog("Registering Discord native hooks")
+        try {
+            DexFinder.init(param.appInfo, param.classLoader, path)
+            for (spec in runtime) spec.applyTo(scope)
+            if (!scriptLoaderInstalled) {
+                ModuleSettings.report(
+                    hostContext,
+                    "script_loader_missing",
+                    "Discord React Native bundle loader not found",
+                )
+            } else {
+                ModuleSettings.report(hostContext, "hooks_ready")
             }
-
-            ModuleSettings.report(hostContext, "initializing")
-            try {
-                DexFinder.init(param.appInfo, param.classLoader, modulePath)
-                for (spec in runtime) spec.applyTo(scope)
-                if (!scriptLoaderInstalled) {
-                    ModuleSettings.report(
-                        hostContext,
-                        "script_loader_missing",
-                        "Discord React Native bundle loader was not found",
-                    )
-                } else {
-                    ModuleSettings.report(hostContext, "hooks_ready")
-                }
-            } catch (error: Throwable) {
-                XposedBridge.log("ValancedX: bootstrap error: $error")
-                ModuleSettings.report(hostContext, "bootstrap_error", error.message)
-            } finally {
-                runCatching { DexFinder.release() }.onFailure {
-                    XposedBridge.log("ValancedX: DexKit cleanup error: $it")
-                }
-            }
+        } catch (error: Throwable) {
+            reportToLog("Hook bootstrap failed", error)
+            ModuleSettings.report(hostContext, "bootstrap_error", error.message)
+        } finally {
+            runCatching { DexFinder.release() }
+                .onFailure { reportToLog("DexKit cleanup error", it) }
         }
+    }
+
+    private fun findModuleApk(context: Context): String? {
+        modulePath?.takeIf { it.isNotBlank() && File(it).isFile }?.let { return it }
+        return runCatching {
+            context.packageManager.getApplicationInfo(MODULE_PACKAGE, 0).sourceDir
+                ?.takeIf { File(it).isFile }
+        }.getOrNull()
+    }
+
+    private fun reportToLog(message: String, error: Throwable? = null) {
+        Log.i("ValancedX", message, error)
+        XposedBridge.log("ValancedX: " + message +
+            (if (error != null) " (" + error.javaClass.simpleName + ": " + error.message + ")" else ""))
     }
 }
 

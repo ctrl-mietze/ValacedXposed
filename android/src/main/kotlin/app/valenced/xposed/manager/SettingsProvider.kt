@@ -42,6 +42,7 @@ class SettingsProvider : ContentProvider() {
                 val state = extras?.getString("state").orEmpty().take(48)
                 val allowed = setOf(
                     "disabled", "safe_mode", "initializing", "hooks_ready",
+                    "framework_attached", "module_path_missing",
                     "native_only", "bootstrap_error", "bundle_injected", "bundle_error",
                     "script_loader_missing",
                 )
@@ -72,7 +73,7 @@ class SettingsProvider : ContentProvider() {
                         successes++
                         streak = 0
                     }
-                    "bootstrap_error", "bundle_error", "script_loader_missing" -> {
+                    "bootstrap_error", "bundle_error", "script_loader_missing", "module_path_missing" -> {
                         errors++
                         streak++
                         // A real reported boot failure, repeated three times, triggers
