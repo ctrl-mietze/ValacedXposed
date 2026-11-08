@@ -54,6 +54,9 @@ class InjectorScope internal constructor(
 private val injectors = CopyOnWriteArrayList<ScriptInjector>()
 private val injectorStarted = AtomicBoolean(false)
 
+@Volatile
+var scriptLoaderInstalled = false
+
 /**
  * Register a [ScriptInjector] to be invoked by the [scriptLoader] tweak before the host app's bundle is loaded.
  *
@@ -134,6 +137,7 @@ private fun Tweak.hookLoader(instance: Class<*>) {
                 runInjectors(this@hookLoader, loadScriptFromAssets, loadScriptFromFile)
             }
         }
+        scriptLoaderInstalled = true
     } catch (e: Exception) {
         log.e("Failed to hook script loading methods in ${instance.name}", e)
     }

@@ -5,10 +5,13 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import app.valenced.bridge.ValencedBridge
 import app.valenced.xposed.api.HostScope
+import app.valenced.xposed.manager.HookMode
+import app.valenced.xposed.manager.HookPolicy
 import app.valenced.xposed.manager.ModuleSettings
 import app.valenced.xposed.tweaks.*
 import app.valenced.xposed.tweaks.base.lifecycleSupport
 import app.valenced.xposed.tweaks.base.scriptLoader
+import app.valenced.xposed.tweaks.base.scriptLoaderInstalled
 import app.valenced.xposed.tweaks.bridge.ValencedBridgeRegistry
 import app.valenced.xposed.tweaks.bridge.additionalBridgeMethods
 import app.valenced.xposed.tweaks.bridge.valencedBridgeSupport
@@ -26,8 +29,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 private lateinit var modulePath: String
 
 /**
- * ValacedXposed deliberately hooks only Discord's main process.
- * The upstream native/JS bridge IDs remain stable for bundle compatibility.
+ * Discord-only Xposed entrypoint.
+ *
+ * The loader is kept ABI-compatible with the upstream Hermes bundle.
+ * All controls are read from the separately installed ValancedX manager.
  */
 @Suppress("UNUSED")
 class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
@@ -36,7 +41,7 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
         private val initialized = AtomicBoolean(false)
     }
 
-    private val tweaks: List<TweakSpec> = listOf(
+    private val runtime: List<TweakSpec> = listOf(
         valencedBridgeSupport,
         scriptLoader,
         discordVersionRetriever,
@@ -63,9 +68,8 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
         if (param.packageName != ValencedConstants.TARGET_PACKAGE) return
         if (param.processName != ValencedConstants.TARGET_PACKAGE) return
         if (!attached.compareAndSet(false, true)) return
-
         if (!::modulePath.isInitialized) {
-            XposedBridge.log("ValancedX: module path unavailable; skipping hook")
+            XposedBridge.log("ValancedX: Xposed module path missing")
             return
         }
 
@@ -75,38 +79,50 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
             classLoader = param.classLoader,
         )
 
-        try {
-            lifecycleSupport.applyTo(scope)
-            scope.withAppContext { appContext ->
-                if (!initialized.compareAndSet(false, true)) return@withAppContext
-                val config = ModuleSettings.read(appContext)
-                if (!config.enabled) {
-                    ModuleSettings.report(appContext, "disabled", "Hook disabled in ValancedX")
+        // Minimal lifecycle hook always runs so the manager can receive
+        // a status, even when safe mode disables all optional integrations.
+        lifecycleSupport.applyTo(scope)
+        scope.withAppContext { hostContext ->
+            if (!initialized.compareAndSet(false, true)) return@withAppContext
+
+            val config = ModuleSettings.read(hostContext)
+            when (HookPolicy.resolve(config.enabled, config.javascriptEnabled, config.safeMode)) {
+                HookMode.OFF -> {
+                    ModuleSettings.report(hostContext, "disabled")
                     return@withAppContext
                 }
+                HookMode.RECOVERY -> {
+                    ModuleSettings.report(hostContext, "safe_mode")
+                    return@withAppContext
+                }
+                HookMode.MINIMAL -> {
+                    ModuleSettings.report(hostContext, "native_only")
+                    return@withAppContext
+                }
+                HookMode.FULL -> Unit
+            }
 
-                ModuleSettings.report(appContext, "initializing")
-                try {
-                    DexFinder.init(param.appInfo, param.classLoader, modulePath)
-                    for (spec in tweaks) {
-                        if (!config.javascriptEnabled && spec === valencedScriptLoader) continue
-                        spec.applyTo(scope)
-                    }
+            ModuleSettings.report(hostContext, "initializing")
+            try {
+                DexFinder.init(param.appInfo, param.classLoader, modulePath)
+                for (spec in runtime) spec.applyTo(scope)
+                if (!scriptLoaderInstalled) {
                     ModuleSettings.report(
-                        appContext,
-                        if (config.javascriptEnabled) "hooks_ready" else "native_only",
+                        hostContext,
+                        "script_loader_missing",
+                        "Discord React Native bundle loader was not found",
                     )
-                } catch (error: Throwable) {
-                    XposedBridge.log("ValancedX: hook bootstrap failed: $error")
-                    ModuleSettings.report(appContext, "bootstrap_error", error.message)
-                } finally {
-                    runCatching { DexFinder.release() }.onFailure {
-                        XposedBridge.log("ValancedX: DexKit cleanup failed: $it")
-                    }
+                } else {
+                    ModuleSettings.report(hostContext, "hooks_ready")
+                }
+            } catch (error: Throwable) {
+                XposedBridge.log("ValancedX: bootstrap error: $error")
+                ModuleSettings.report(hostContext, "bootstrap_error", error.message)
+            } finally {
+                runCatching { DexFinder.release() }.onFailure {
+                    XposedBridge.log("ValancedX: DexKit cleanup error: $it")
                 }
             }
-        } catch (error: Throwable) {
-            XposedBridge.log("ValancedX: unable to install lifecycle hook: $error")
         }
     }
 }

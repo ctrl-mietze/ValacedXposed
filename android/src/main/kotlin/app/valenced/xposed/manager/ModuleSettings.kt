@@ -6,11 +6,12 @@ import android.os.Bundle
 import android.util.Log
 import app.valenced.xposed.BuildConfig
 
-/** Narrow IPC contract between Discord and the installed module manager. */
+/** The only IPC channel shared with Discord. No privileged Android permissions. */
 internal object ModuleSettings {
     data class Config(
-        val enabled: Boolean = true,
-        val javascriptEnabled: Boolean = true,
+        val enabled: Boolean = false,
+        val javascriptEnabled: Boolean = false,
+        val safeMode: Boolean = true,
     )
 
     private val uri: Uri
@@ -19,12 +20,16 @@ internal object ModuleSettings {
     fun read(context: Context): Config =
         runCatching {
             val result = context.contentResolver.call(uri, "configuration", null, null)
+                ?: error("Missing manager configuration")
             Config(
-                enabled = result?.getBoolean("hook_enabled", true) ?: true,
-                javascriptEnabled = result?.getBoolean("javascript_enabled", true) ?: true,
+                enabled = result.getBoolean("hook_enabled", true),
+                javascriptEnabled = result.getBoolean("javascript_enabled", true),
+                safeMode = result.getBoolean("safe_mode", false),
             )
         }.getOrElse {
-            Log.w("ValancedX", "Manager configuration unavailable; using defaults", it)
+            // Fail closed. A broken or missing manager must not unexpectedly
+            // inject code into another application.
+            Log.e("ValancedX", "Cannot reach manager; skipping optional hooks", it)
             Config()
         }
 
@@ -35,6 +40,8 @@ internal object ModuleSettings {
                 putString("details", details?.take(240))
             }
             context.contentResolver.call(uri, "report", null, extras)
-        }.onFailure { Log.w("ValancedX", "Could not send local hook status", it) }
+        }.onFailure {
+            Log.w("ValancedX", "Unable to send local module event", it)
+        }
     }
 }
