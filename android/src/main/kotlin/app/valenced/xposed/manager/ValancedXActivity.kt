@@ -174,6 +174,7 @@ class ValancedXActivity : Activity() {
         "disabled" -> "Beim letzten Start deaktiviert"
         "initializing" -> "Letzter Start: Initialisierung"
         "bundle_error" -> "Fehler beim Hermes-Bundle"
+        "js_runtime_error" -> "JavaScript-Laufzeitfehler in Discord"
         "bootstrap_error" -> "Fehler bei der Hook-Initialisierung"
         else -> "Noch keine Hook-Rückmeldung"
     }
@@ -181,7 +182,7 @@ class ValancedXActivity : Activity() {
     private fun stateColor(): Int = when (state()) {
         "bundle_injected" -> mintColor
         "hooks_ready", "framework_attached" -> accentColor
-        "script_loader_missing", "bundle_error", "bootstrap_error", "module_path_missing" -> errorColor
+        "script_loader_missing", "bundle_error", "bootstrap_error", "module_path_missing", "js_runtime_error" -> errorColor
         "safe_mode", "native_only" -> warmColor
         else -> mutedColor
     }

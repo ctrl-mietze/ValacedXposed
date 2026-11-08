@@ -44,7 +44,7 @@ class SettingsProvider : ContentProvider() {
                     "disabled", "safe_mode", "initializing", "hooks_ready",
                     "framework_attached", "module_path_missing",
                     "native_only", "bootstrap_error", "bundle_injected", "bundle_error",
-                    "script_loader_missing",
+                    "script_loader_missing", "js_runtime_error",
                 )
                 if (state !in allowed) throw IllegalArgumentException("Invalid module status")
                 val details = extras?.getString("details").orEmpty().take(240)

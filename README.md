@@ -4,7 +4,11 @@ Eigenständiger Android-Xposed-Fork auf Basis von **Valenced**, mit der Manager-
 
 ![ValancedX](assets/logo.svg)
 
-## ValancedX 1.0.2 – Original-Xposed-Start wiederhergestellt
+## ValancedX 1.0.3 – Hermes- und Design-Kompatibilität
+
+**Neu in 1.0.3:** Versionsabhängige Metro-Suche nach Discords Design-Modul besitzt jetzt einen strukturellen Fallback. UI-Dialoge und Badge-Stile werden erst beim tatsächlichen Einsatz importiert statt früh beim App-Start. Hermes-Laufzeitfehler aus dem bestehenden Error-Dialog erscheinen außerdem in der lokalen ValancedX-Diagnose. Valenceds ursprünglicher Xposed-Bootstrap bleibt unverändert erhalten.
+
+### Grundlage: Xposed-Start aus 1.0.2
 
 ValancedX erweitert die **offizielle Discord-App** über ein kompatibles Xposed-/LSPosed-Framework. Es gibt keinen Discord-APK-Patcher und keine zweite Discord-App.
 
@@ -56,4 +60,4 @@ Release-Builds werden getrennt mit dem bestehenden Projektschlüssel signiert, d
 
 Fork von [Valenced/valenced](https://github.com/Valenced/valenced), **GNU GPL-3.0**. Die ursprünglichen Lizenztexte und Credits bleiben erhalten. Branding, Manager-UI und Ergänzungen stammen aus ValacedXposed.
 
-[Android-Hook-Start](docs/HOOK_STARTUP.md) · [Version 1.0.2](docs/RELEASE_1.0.2.md) · [Releases](https://github.com/ctrl-mietze/ValacedXposed/releases)
+[Android-Hook-Start](docs/HOOK_STARTUP.md) · [Version 1.0.3](docs/RELEASE_1.0.3.md) · [Releases](https://github.com/ctrl-mietze/ValacedXposed/releases)

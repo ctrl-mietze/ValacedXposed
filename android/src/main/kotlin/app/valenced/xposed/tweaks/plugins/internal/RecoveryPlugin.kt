@@ -17,6 +17,7 @@ import app.valenced.plugins.PluginStatesStore
 import app.valenced.reloadApp
 import app.valenced.xposed.*
 import app.valenced.xposed.api.registerNativeMethod
+import app.valenced.xposed.manager.ModuleSettings
 import app.valenced.xposed.tweaks.DevLoader
 import app.valenced.xposed.tweaks.base.withAppActivity
 import app.valenced.xposed.tweaks.crashRecoveryTriggered
@@ -77,6 +78,9 @@ fun PluginScope.addBridgeMethods() {
         registerNativeMethod("valenced.alertError") {
             val (error, version) = it
             val errorString = "$error"
+            // Preserve the existing dialog and copy action, but make the
+            // exception visible in the local ValancedX diagnostics as well.
+            ModuleSettings.report(act, "js_runtime_error", errorString)
 
             val clipboard = act.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Stack Trace", errorString)

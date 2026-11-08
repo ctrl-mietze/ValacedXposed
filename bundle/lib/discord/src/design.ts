@@ -32,7 +32,7 @@ export let Design: Design = proxify(
     () => {
         // ID: 13171
         // [3909, 4608, 5182, 13172, 2, ...] (141 dependencies)
-        const [module] = lookupModule(
+        const [strictMatch] = lookupModule(
             withProps('TableRow', 'Button')
                 .and(
                     withDependencies<Design>(
@@ -48,6 +48,26 @@ export let Design: Design = proxify(
                 .keyAs('valenced.discord.design.Design'),
         )
 
+        // Discord routinely changes its generated Metro dependency graph.
+        // Keep the upstream fingerprint as the preferred fast path, then
+        // identify the unique design barrel by its exported API shape.
+        // This only inspects initialized modules, never blindly executes
+        // arbitrary Discord module factories during app startup.
+        const [compatibleMatch] = strictMatch
+            ? [undefined]
+            : lookupModule(
+                  withProps<Design>(
+                      'TableRow',
+                      'Button',
+                      'AlertModal',
+                      'AlertActionButton',
+                      'Stack',
+                      'Text',
+                  ).keyAs('valancedx.discord.design.api-compat'),
+                  { cached: false },
+              )
+
+        const module = strictMatch ?? compatibleMatch
         if (module) return (Design = module)
     },
     {

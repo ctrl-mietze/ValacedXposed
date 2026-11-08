@@ -8,7 +8,9 @@ import { createElement, isValidElement } from 'react'
 import { Image } from 'react-native'
 import { Badges, UsersWithBadges } from './constants'
 import manifest from './manifest.json'
-import { styles, useBadgeStyles } from './styles'
+// Discord's design barrel may not be loaded during initial app startup.
+import defer * as BadgeStylesModule from './styles'
+import type { useBadgeStyles } from './styles'
 import { mapElementTree, patchRender } from './utils'
 import type { FC, ReactElement, ReactNode } from 'react'
 import type { ImageSourcePropType } from 'react-native'
@@ -113,7 +115,7 @@ const injectCustomBadges: RenderPatch<ProfileBadgeRowsProps> = (
 
             customBadges.push(
                 createElement(
-                    patchRender(ProfileBadge, patchCustomBadge, useBadgeStyles),
+                    patchRender(ProfileBadge, patchCustomBadge, BadgeStylesModule.useBadgeStyles),
                     {
                         ...template.props,
                         key: `valenced-badge-${id}`,
@@ -179,8 +181,6 @@ const patchCustomBadge: RenderPatch<ProfileBadgeProps, BadgeStyles> = (
     })
 }
 
-const { AlertActionButton, AlertModal, Stack, Text } = Design
-
 function openBadgeDialog(
     id: BadgeId,
     { label, description, bnw, icon }: Badge,
@@ -188,23 +188,23 @@ function openBadgeDialog(
 ): void {
     AlertActionCreators.openAlert(
         `valenced-profile-badge-${id}`,
-        <AlertModal
+        <Design.AlertModal
             title={
-                <Stack style={styles.stack}>
+                <Design.Stack style={BadgeStylesModule.styles.stack}>
                     <Image
                         source={icon}
-                        style={[styles.display, bnw && badgeStyles.tinted]}
+                        style={[BadgeStylesModule.styles.display, bnw && badgeStyles.tinted]}
                     />
-                    <Text
+                    <Design.Text
                         variant="heading-lg/bold"
                         color="mobile-text-heading-primary"
                     >
                         {label}
-                    </Text>
-                </Stack>
+                    </Design.Text>
+                </Design.Stack>
             }
             content={description}
-            actions={<AlertActionButton text="OK" />}
+            actions={<Design.AlertActionButton text="OK" />}
         />,
     )
 }

@@ -19,10 +19,12 @@ import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { useLayoutEffect } from 'react'
 import { Setting } from '../settings/constants'
 import defer * as NavigatorHeaderWithIcon from './components/NavigatorHeaderWithIcon'
-import { PluginFileInstallConfirmAlert } from './components/PluginInstallConfirmAlert'
-import PluginInstallFailedAlert from './components/PluginInstallFailedAlert'
-import PluginsFailedToStartAlert from './components/PluginsFailedToStartAlert'
-import PluginsRequireReloadAlert from './components/PluginsRequireReloadAlert'
+// Alert implementations depend on Discord's design barrel, which is not
+// necessarily initialized at startup. Load each UI module only when needed.
+import defer * as InstallConfirmationAlert from './components/PluginInstallConfirmAlert'
+import defer * as InstallFailedAlert from './components/PluginInstallFailedAlert'
+import defer * as FailedToStartAlert from './components/PluginsFailedToStartAlert'
+import defer * as RequireReloadAlert from './components/PluginsRequireReloadAlert'
 import type { StackScreenProps } from '@react-navigation/stack'
 import type { ReactNavigationParamList } from '@valenced/externals/react-navigation'
 import type { PluginApi } from '@valenced/plugins/types'
@@ -95,7 +97,7 @@ function showPendingReloadAlertIfNeeded() {
     AlertActionCreators.dismissAlert(PluginsRequireReloadAlertKey)
     AlertActionCreators.openAlert(
         PluginsRequireReloadAlertKey,
-        <PluginsRequireReloadAlert plugins={plugins} />,
+        <RequireReloadAlert.default plugins={plugins} />,
     )
 }
 
@@ -109,7 +111,7 @@ function showErrorAlertIfNeeded() {
     AlertActionCreators.dismissAlert(PluginsFailedToStartAlertKey)
     AlertActionCreators.openAlert(
         PluginsFailedToStartAlertKey,
-        <PluginsFailedToStartAlert plugins={plugins} />,
+        <FailedToStartAlert.default plugins={plugins} />,
     )
 }
 
@@ -132,7 +134,7 @@ pEmitter.on('installReady', prompt => {
     AlertActionCreators.dismissAlert(PluginInstallConfirmAlertKey)
     AlertActionCreators.openAlert(
         PluginInstallConfirmAlertKey,
-        <PluginFileInstallConfirmAlert prompt={prompt} />,
+        <InstallConfirmationAlert.PluginFileInstallConfirmAlert prompt={prompt} />,
     )
 })
 
@@ -141,7 +143,7 @@ pEmitter.on('install', result => {
         AlertActionCreators.dismissAlert(PluginInstallFailedAlertKey)
         AlertActionCreators.openAlert(
             PluginInstallFailedAlertKey,
-            <PluginInstallFailedAlert error={result.error} />,
+            <InstallFailedAlert.default error={result.error} />,
         )
         return
     }

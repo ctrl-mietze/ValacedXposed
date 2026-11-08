@@ -15,8 +15,8 @@ import manifest from './manifest.json'
 import { addDefaultRepoIfNeeded } from './repos'
 import defer * as BrowseScreen from './screens/ValencedPluginsBrowseSettingScreen'
 import defer * as PluginsScreen from './screens/ValencedPluginsSettingScreen'
-import { openPluginSettings } from './utils/alerts'
-import { showPluginOptionsActionSheet } from './utils/sheets'
+import defer * as PluginAlerts from './utils/alerts'
+import defer * as PluginSheets from './utils/sheets'
 import type { JsonStorage } from '@valenced/json-storage'
 import type { PluginApi } from '@valenced/plugins/types'
 import type {
@@ -50,7 +50,7 @@ registerInternalPlugin<{ jsonStorage: Storage }>(manifest, {
                 showPluginOptionsSheet(id) {
                     const target = pList.get(id)
                     if (!target) throw new Error(`Plugin not installed: ${id}`)
-                    showPluginOptionsActionSheet(target)
+                    PluginSheets.showPluginOptionsActionSheet(target)
                 },
                 hasPluginSettings(id) {
                     const target = pList.get(id)
@@ -64,7 +64,7 @@ registerInternalPlugin<{ jsonStorage: Storage }>(manifest, {
                             `Plugin not installed or has no settings: ${id}`,
                         )
 
-                    openPluginSettings(pList.get(id)!)
+                    PluginAlerts.openPluginSettings(pList.get(id)!)
                 },
                 claimPlugins(match) {
                     const unclaim = claimPlugins(match)
