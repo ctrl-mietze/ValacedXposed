@@ -16,6 +16,8 @@ Die erste reguläre Release-Version von **ValancedX**, dem Android-Manager und X
 
 ## Installation
 
+**Bei einem Wechsel von 0.1.0 Alpha:** Das alte Debug-Modul `ctrl.mietze.valacedxposed.debug` zuvor in LSPosed deaktivieren oder deinstallieren. Beide Module gleichzeitig zu aktivieren kann zu doppelten Hooks führen.
+
 1. `ValancedX-v1.0.0-release.apk` installieren.
 2. In LSPosed oder einem kompatiblen Xposed-Framework das Modul **ValancedX** aktivieren.
 3. Nur **com.discord** als Scope verwenden.

@@ -28,11 +28,12 @@ Die vorhandenen Plugin- und Hermes-ABI-Schnittstellen bleiben intern zur ursprü
 
 ## Installation
 
-1. Die eigene, signierte **ValancedX 1.0.0 Release-APK** über [GitHub Releases](https://github.com/ctrl-mietze/ValacedXposed/releases) beziehen.
-2. Die APK installieren und ValancedX im Xposed-Framework aktivieren.
-3. Ausschließlich `com.discord` als Scope auswählen.
-4. Discord vollständig beenden und neu starten.
-5. Unter Diagnose die lokale Hook-Rückmeldung prüfen.
+1. Falls die alte Alpha-Debug-App installiert ist: Dieses Xposed-Modul zuerst deaktivieren oder deinstallieren, damit keine doppelten Hooks entstehen.
+2. Die eigene, signierte **ValancedX 1.0.0 Release-APK** über [GitHub Releases](https://github.com/ctrl-mietze/ValacedXposed/releases) beziehen.
+3. Die APK installieren und ValancedX im Xposed-Framework aktivieren.
+4. Ausschließlich `com.discord` als Scope auswählen.
+5. Discord vollständig beenden und neu starten.
+6. Unter Diagnose die lokale Hook-Rückmeldung prüfen.
 
 ### Kompatibilität
 
