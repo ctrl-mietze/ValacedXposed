@@ -1,0 +1,11 @@
+{
+    "id": "veyra.manager.themes",
+    "name": "ValancedX Theme Bridge",
+    "description": "Connects the native manager to Discord's Valenced theme store.",
+    "author": "Veyra",
+    "icon": "PaintPaletteIcon",
+    "enabledByDefault": true,
+    "dependencies": {
+        "valenced.settings.themes": {}
+    }
+}

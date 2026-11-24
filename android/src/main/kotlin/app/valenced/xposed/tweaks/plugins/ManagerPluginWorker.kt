@@ -20,6 +20,7 @@ import app.valenced.xposed.manager.HookMode
 import app.valenced.xposed.manager.ModuleSettings
 import app.valenced.xposed.tweaks.plugins.internal.InternalPluginFlags
 import app.valenced.xposed.tweaks.plugins.repos.refreshRepo
+import app.valenced.xposed.tweaks.bridge.ValencedBridgeRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -41,9 +42,11 @@ internal class ManagerPluginProgress(val report: (String, Int) -> Unit) :
 
 internal object ManagerPluginWorker {
     private const val PREFIX = "valenced.plugins."
-    private val allow = setOf("planInstall", "install", "setEnabled", "uninstall")
+    private val allow = setOf("planInstall", "install", "setEnabled", "uninstall", "installLegacy")
     private val handlers = ConcurrentHashMap<String, suspend (List<Any?>) -> Any?>()
     private val started = AtomicBoolean(false)
+    private val themesReady = AtomicBoolean(false)
+    fun markThemesReady() { themesReady.set(true) }
     private data class Preview(val token: String, val plan: Map<*, *>, val at: Long)
     private var preview: Preview? = null
 
@@ -139,6 +142,8 @@ internal object ManagerPluginWorker {
                 available.put(JSONObject().put("id", id).put("name", plugin.name.take(100))
                     .put("description", plugin.description.take(180)).put("author", plugin.author.take(80))
                     .put("version", version).put("repo", repo.url)
+                    .put("themePack", plugin.versions[version]?.dependencies?.containsKey("valenced.api.themes") == true &&
+                        id !in setOf("valenced.settings.themes","valenced.themes.legacy"))
                     .put("installed", pluginRegistry.factories.containsKey(id))
                     .put("installedVersion", pluginRegistry.factories[id]?.manifest?.version?.toString() ?: "")
                     .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: ""))
@@ -179,6 +184,29 @@ internal object ManagerPluginWorker {
             }
         }
         when (op) {
+            "legacy_preview" -> return LegacyRevengeImporter.preview(data.getString("url"))
+            "legacy_install" -> {
+                invoke("installLegacy",data.getString("token"))
+                return snapshot("Legacy-Plugin importiert. Unter Installiert gezielt aktivieren.")
+            }
+            "theme_snapshot", "theme_import", "theme_apply", "theme_reset", "theme_remove" -> {
+                if (!themesReady.get() || !ValencedBridgeRegistry.isReady) {
+                    return snapshot().put("themeState",JSONObject().put("ready",false).put("message","Discord-Theme-Bridge noch nicht bereit."))
+                }
+                if(op=="theme_import"){
+                    val url=validateUrl(data.getString("url"))
+                    val fetched=httpClient.getWithETag(url,null,15_000L) as? ETagFetchResult.Fetched
+                        ?: error("Keine Theme-Daten empfangen.")
+                    require(fetched.bytes.size in 1..250_000) {"Theme-JSON ist zu groß."}
+                    data.put("url",url).put("theme",JSONObject(fetched.bytes.decodeToString()))
+                }
+                val raw=withTimeout(30_000L){
+                    ValencedBridgeRegistry.callJSMethod("valancedx.manager.themes",listOf(op,data.toString()))
+                } as? String ?: error("Ungültige Theme-Antwort.")
+                val result=JSONObject(raw)
+                if(result.has("error"))return result
+                return snapshot().put("themeState",result.getJSONObject("themeState"))
+            }
             "snapshot" -> return snapshot()
             "refresh" -> {
                 val errors = mutableListOf<String>()

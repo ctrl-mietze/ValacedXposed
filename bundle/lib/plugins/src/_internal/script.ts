@@ -1,3 +1,4 @@
+import { createLegacyOptionsFactory } from "./legacy-adapter"
 import { pUnscopedApi } from '../apis'
 import type { AnyFunction } from '@valenced/utils/types'
 import type {
@@ -20,6 +21,7 @@ export function createOptionsFactory(
     script?: string,
 ): PluginOptionsFactory {
     if (!script) return () => ({})
+    if (id.startsWith("veyra.legacy.")) return createLegacyOptionsFactory(id,script)
 
     return () => {
         const opts = new Function(

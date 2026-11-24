@@ -33,6 +33,15 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.coroutineContext
 
 val pluginInstallMethods by tweak {
+    // Only registered in the authenticated manager worker, not a new general
+    // JavaScript native install endpoint.
+    ManagerPluginWorker.register("valenced.plugins.installLegacy") { args ->
+        val token=args.firstOrNull() as? String ?: error("Legacy-Token fehlt.")
+        val installed=LegacyRevengeImporter.install(token,appInfo.dataDir)
+        handleInstallResult(installed)
+        emitDependencyGraphUpdate()
+        null
+    }
     pluginSystemMethod("valenced.plugins.installFile") {
         SourcesStore.ensureLoaded(pluginPaths(appInfo.dataDir))
         promptInstallPlugin(

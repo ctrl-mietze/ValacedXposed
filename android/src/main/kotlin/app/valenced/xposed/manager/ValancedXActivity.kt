@@ -68,12 +68,12 @@ class ValancedXActivity : Activity() {
         window.navigationBarColor=backgroundColor
     }
 
-    private val tabs = arrayOf("Start", "Module", "Plugins", "Diagnose", "Info")
+    private val tabs = arrayOf("Start", "Module", "Plugins", "Themes", "Diagnose", "Info")
     private var currentTab = 0
     private var scrollView: ScrollView? = null
     private var connectionGranted = false
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val refresh = Runnable { if (currentTab != 2) render(preserveScroll = true) }
+    private val refresh = Runnable { if (currentTab != 2 && currentTab != 3) render(preserveScroll = true) }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key?.startsWith("last_") == true || key?.startsWith("total_") == true ||
             key == "event_history" || key == "error_streak") {
@@ -91,6 +91,8 @@ class ValancedXActivity : Activity() {
         readTheme()
         currentTab = (savedInstanceState?.getInt("tab") ?: 0).coerceIn(0, tabs.lastIndex)
         pluginPage = (savedInstanceState?.getInt("pluginPage") ?: 0).coerceIn(0,3)
+        themePage = (savedInstanceState?.getInt("themePage") ?: 0).coerceIn(0,1)
+        themeKind = savedInstanceState?.getString("themeKind") ?: "themes"
         pluginQuery = savedInstanceState?.getString("pluginQuery").orEmpty()
         pluginJob = savedInstanceState?.getString("pluginJob")
         pluginTarget = savedInstanceState?.getString("pluginTarget")
@@ -133,6 +135,8 @@ class ValancedXActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("tab", currentTab)
         outState.putInt("pluginPage", pluginPage)
+        outState.putInt("themePage",themePage)
+        outState.putString("themeKind",themeKind)
         outState.putString("pluginQuery", pluginQuery)
         outState.putString("pluginJob", pluginJob)
         outState.putString("pluginTarget", pluginTarget)
@@ -660,6 +664,19 @@ class ValancedXActivity : Activity() {
                 pluginNote = result.optString("error")
                 pluginFailedTarget = target
                 if (target != null) Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_LONG).show()
+            } else if (result.has("legacyPreview")) {
+                val item=result.getJSONObject("legacyPreview")
+                pluginNote="Legacy-Manifest geprüft."
+                AlertDialog.Builder(this@ValancedXActivity).setTitle(item.optString("name"))
+                    .setMessage(item.optString("description")+"\n"+item.optString("author")+"\n\n"+
+                        item.optString("url")+"\nSHA-256: "+item.optString("sha256")+
+                        "\n\nExperimenteller Port. Fremder JS-Code läuft nach deiner Aktivierung in Discord. Kompatibilität nicht garantiert.")
+                    .setNegativeButton("Abbrechen",null)
+                    .setPositiveButton("Importieren"){_,_->pluginAction("legacy_install",JSONObject().put("token",item.optString("token")))}.show()
+            } else if (result.has("themeState")) {
+                discordThemeState=result.getJSONObject("themeState")
+                if(result.has("available"))pluginData=result
+                pluginNote=discordThemeState?.optString("message").orEmpty()
             } else if (result.has("sourcePreview")) {
                 val source=result.getJSONObject("sourcePreview")
                 pluginNote="Index erfolgreich geprüft."
@@ -696,6 +713,7 @@ class ValancedXActivity : Activity() {
                 pluginNote = result.optString("message")
                 if (target != null) Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_SHORT).show()
             }
+            if (currentTab == 3) render(preserveScroll=true)
             if (currentTab == 2) {
                 if (target != null && pluginPage == 1 && discoveryControls.isNotEmpty()) {
                     // Update the existing views, not the whole ScrollView.
@@ -713,7 +731,7 @@ class ValancedXActivity : Activity() {
         runCatching { ManagerPluginMailbox.submit(operation, data) }
             .onSuccess {
                 pluginJob = it
-                pluginTarget = if (operation == "install_direct") pluginKey(data.optString("id"), data.optString("repo")) else null
+                pluginTarget = if (operation == "install_direct" && currentTab==2 && pluginPage==1) pluginKey(data.optString("id"), data.optString("repo")) else null
                 pluginFailedTarget = null
                 pluginNote = "Discord verarbeitet die Aktion …"
                 mainHandler.removeCallbacks(pluginPoll)
@@ -722,6 +740,7 @@ class ValancedXActivity : Activity() {
                 pluginNote = it.message.orEmpty()
                 Toast.makeText(this, pluginNote, Toast.LENGTH_LONG).show()
             }
+        if (currentTab == 3) render(preserveScroll=true)
         if (currentTab == 2) {
             if (operation == "install_direct" && pluginPage == 1) updateDiscoveryControls()
             else render(preserveScroll = true)
@@ -938,7 +957,8 @@ class ValancedXActivity : Activity() {
         eyebrow(parent,"EMPFOHLENE KATALOGE")
         val suggested=listOf(
             Triple("Valenced Community","https://community.valenced.app/index.json","Offizieller Plugin-Katalog"),
-            Triple("dxckie-cell","https://dxckie-cell.github.io/valenced-plugins/index.json","Optionale Community-Erweiterungen")
+            Triple("dxckie-cell","https://dxckie-cell.github.io/valenced-plugins/index.json","Optionale Community-Erweiterungen"),
+            Triple("ndb1995","https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json","Zusätzlicher Valenced-Katalog")
         )
         for ((name,url,description) in suggested) {
             card(parent,top=8) {
@@ -953,7 +973,141 @@ class ValancedXActivity : Activity() {
         card(parent,top=8) {
             add(this,label("Revenge Next",16f,whiteColor,true))
             add(this,label("Archivierte Plattform. Legacy-Plugins benötigen einen kompatiblen Port; kein automatischer Import.",12f,mutedColor),top=6)
-            add(this,button("Archiv ansehen") { openWeb("https://github.com/revenge-mod/revenge-community-plugins") },top=10)
+            add(this,button("Legacy-Import öffnen",true) { pluginPage=3;render() },top=10)
+            add(this,button("Archiv ansehen") { openWeb("https://github.com/revenge-mod/revenge-community-plugins") },top=7)
+        }
+    }
+
+
+
+    private var themePage=0
+    private var discordThemeState:JSONObject?=null
+    private var themeKind="themes"
+    private val themeCatalog = listOf(
+        Triple("Catppuccin Mocha","Mauve · Dark","https://raw.githubusercontent.com/catppuccin/vendetta/main/themes/mocha/mauve.json"),
+        Triple("Catppuccin Frappé","Lavender · Dark","https://raw.githubusercontent.com/catppuccin/vendetta/main/themes/frappe/lavender.json"),
+        Triple("Catppuccin Macchiato","Mauve · Dark","https://raw.githubusercontent.com/catppuccin/vendetta/main/themes/macchiato/mauve.json"),
+        Triple("Catppuccin Latte","Mauve · Light","https://raw.githubusercontent.com/catppuccin/vendetta/main/themes/latte/mauve.json"),
+        Triple("system24","Monochrome · Teal","https://raw.githubusercontent.com/LukasDerBaum42/discord-theme/main/themes/system24.json"),
+        Triple("system24 Purple","Monochrome · Violet","https://raw.githubusercontent.com/LukasDerBaum42/discord-theme/main/themes/system24-purple.json")
+    )
+
+    private fun themesPage(parent:LinearLayout) {
+        eyebrow(parent,"APPEARANCE")
+        add(parent,label("Themes",29f,whiteColor,true),top=4)
+        add(parent,label("Gestalte Discord und ValancedX getrennt.",13f,mutedColor),top=5)
+        val nav=LinearLayout(this).apply { background=rounded(surfaceColor,borderColor,16);setPadding(dp(4),dp(4),dp(4),dp(4)) }
+        for((i,name) in listOf("Discord","Manager").withIndex()) {
+            val selected=i==themePage
+            nav.addView(label(name,14f,if(selected)whiteColor else mutedColor,true).apply{
+                gravity=Gravity.CENTER;setPadding(dp(5),dp(12),dp(5),dp(12))
+                background=interactive(if(selected)raisedColor else surfaceColor,if(selected)accentColor else surfaceColor,12)
+                setOnClickListener { themePage=i;render();if(i==0&&discordThemeState==null&&pluginJob==null)pluginAction("theme_snapshot") }
+            },LinearLayout.LayoutParams(0,-2,1f))
+        }
+        add(parent,nav,top=15)
+        if(themePage==1){themeScreen(parent);return}
+        if(pluginJob!=null){
+            add(parent,ProgressBar(this).apply{isIndeterminate=true},top=8)
+            add(parent,label(pluginJob?.let{ManagerPluginMailbox.status(it)?.first}?:"Discord verarbeitet die Aktion …",12f,accentColor),top=4)
+        }
+        if(pluginNote.isNotBlank())add(parent,label(pluginNote,12f,mutedColor),top=7)
+        val state=discordThemeState
+        val ready=state?.optBoolean("ready")==true
+        card(parent,top=12){
+            add(this,label("DISCORD THEME ENGINE",11f,accentColor,true))
+            add(this,label(if(ready)"Verbunden" else "Einrichtung",22f,whiteColor,true),top=8)
+            add(this,label(if(ready)"Farben, Hintergründe, Fonts und Packs werden im echten Valenced-Theme-System verwaltet."
+                else "Installiere bzw. aktualisiere die offiziellen Themes-Plugins und starte Discord anschließend neu.",12f,mutedColor),top=5)
+            twoActions(this,button("Status prüfen"){pluginAction("theme_snapshot")},button("Discord öffnen"){openDiscord()})
+            if(!ready)add(this,button("Theme Engine installieren / aktualisieren",true){
+                pluginAction("install_direct",JSONObject().put("id","valenced.settings.themes").put("repo","https://community.valenced.app/index.json"))
+            },top=8)
+            if(!ready)add(this,button("Themes aktivieren"){
+                pluginAction("enable",JSONObject().put("id","valenced.settings.themes"))
+            },top=8)
+        }
+        if(ready){
+            eyebrow(parent,"DEINE THEMES & PACKS")
+            val kinds=listOf("themes" to "Farben","fontPacks" to "Fonts","iconPacks" to "Icons","emojiPacks" to "Emoji")
+            val row=LinearLayout(this)
+            for((key,name) in kinds)row.addView(label(name,11f,if(key==themeKind)whiteColor else mutedColor,true).apply{
+                gravity=Gravity.CENTER;setPadding(dp(3),dp(12),dp(3),dp(12))
+                background=interactive(if(key==themeKind)raisedColor else surfaceColor,if(key==themeKind)accentColor else borderColor,12)
+                setOnClickListener {themeKind=key;render(preserveScroll=true)}
+            },LinearLayout.LayoutParams(0,-2,1f).apply{setMargins(dp(2),0,dp(2),0)})
+            add(parent,row,top=8)
+            val entries=state?.optJSONArray("entries")?:JSONArray()
+            val selected=(0 until entries.length()).mapNotNull{entries.optJSONObject(it)}.filter{it.optString("kind")==themeKind}
+            if(selected.isEmpty())add(parent,label("Noch keine registrierten Packs. Installiere ein Theme-Plugin oder importiere ein JSON-Theme.",12f,mutedColor),top=10)
+            for(item in selected)card(parent,top=8){
+                add(this,label(item.optString("name"),16f,whiteColor,true))
+                add(this,label(item.optString("description"),12f,mutedColor),top=5)
+                if(item.optBoolean("active"))add(this,capsule("Aktiv",mintColor),top=8)
+                else add(this,button("Anwenden",true){
+                    pluginAction("theme_apply",JSONObject().put("plugin",item.optString("plugin")).put("group",item.optString("group"))
+                        .put("id",item.optString("id")).put("kind",item.optString("kind")))
+                },top=8)
+                if(item.optBoolean("imported"))add(this,button("Import entfernen",destructive=true){
+                    AlertDialog.Builder(this@ValancedXActivity).setTitle("Theme entfernen?")
+                        .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen"){_,_->pluginAction("theme_remove",JSONObject().put("url",item.optString("id")))}.show()
+                },top=6)
+            }
+            add(parent,button("Discord-Standard wiederherstellen"){pluginAction("theme_reset",JSONObject().put("kind",themeKind))},top=10)
+        }
+        val available=pluginData?.optJSONArray("available")?:JSONArray()
+        val packs=(0 until available.length()).mapNotNull{available.optJSONObject(it)}.filter{it.optBoolean("themePack")}
+        if(packs.isNotEmpty()){
+            eyebrow(parent,"THEME-PLUGINS AUS DEINEN REPOSITORIES")
+            for(item in packs)card(parent,top=8){
+                add(this,label(item.optString("name"),16f,whiteColor,true))
+                add(this,label(item.optString("description"),12f,mutedColor),top=5)
+                val id=item.optString("id")
+                if(item.optBoolean("installed"))add(this,button("Aktivieren"){pluginAction("enable",JSONObject().put("id",id))},top=8)
+                else add(this,button("Installieren",true){pluginAction("install_direct",JSONObject().put("id",id).put("repo",item.optString("repo")))},top=8)
+            }
+        }
+        eyebrow(parent,"THEME-QUELLEN")
+        card(parent,top=8){
+            add(this,label("Legacy JSON importieren",16f,whiteColor,true))
+            add(this,label("Vendetta, Bunny und Revenge Spec 2. Importierte Farben lassen sich anschließend direkt anwenden.",12f,mutedColor),top=5)
+            add(this,button("+ Theme-URL",true){urlPrompt("Discord Theme","https://…/theme.json"){url->pluginAction("theme_import",JSONObject().put("url",url))}},top=10)
+        }
+        for((name,desc,url) in themeCatalog)card(parent,top=8){
+            add(this,label(name,16f,whiteColor,true));add(this,label(desc,12f,mutedColor),top=4)
+            add(this,label(Uri.parse(url).host?:"GitHub",11f,mutedColor),top=5)
+            add(this,button("Importieren",true){
+                if(ready)pluginAction("theme_import",JSONObject().put("url",url))
+                else Toast.makeText(this@ValancedXActivity,"Zuerst Theme Engine einrichten.",Toast.LENGTH_LONG).show()
+            },top=8)
+        }
+    }
+    private fun urlPrompt(title:String,hint:String,run:(String)->Unit){
+        val input=EditText(this).apply{this.hint=hint;setSingleLine(true);inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI}
+        AlertDialog.Builder(this).setTitle(title).setView(input).setNegativeButton("Abbrechen",null)
+            .setPositiveButton("Weiter"){_,_->run(input.text.toString().trim())}.show()
+    }
+
+    private fun legacyScreen(parent:LinearLayout) {
+        eyebrow(parent,"REVENGE COMPATIBILITY")
+        card(parent,top=9){
+            add(this,label("Legacy Port",23f,whiteColor,true))
+            add(this,label("Experimenteller Adapter für ältere Revenge-/Vendetta-JavaScript-Plugins. Der Import installiert nur den gewählten Code, zunächst deaktiviert.",13f,mutedColor),top=7)
+            add(this,button("+ Plugin-URL importieren",true){urlPrompt("Revenge Plugin","https://…/manifest.json"){url->pluginAction("legacy_preview",JSONObject().put("url",url))}},top=12)
+            add(this,label("Nicht unterstützt: native Revenge-JARs, Revenge Next ZIPs und nicht implementierte alte APIs. Alte Discord-Hooks können weiterhin inkompatibel sein.",12f,warmColor),top=9)
+        }
+        eyebrow(parent,"NEXPID / REVENGE")
+        for((name,slug) in listOf("Char Counter" to "char-counter","Clean URLs" to "clean-urls","Tenor Gif Fix" to "tenor-gif-fix",
+            "Use System Emoji" to "use-system-emoji","Twemoji Everywhere" to "twemoji-everywhere","Themes+" to "themes-plus"))card(parent,top=8){
+            add(this,label(name,16f,whiteColor,true))
+            add(this,label("Legacy · revenge.nexpid.xyz",11f,warmColor),top=4)
+            add(this,button("Port prüfen"){pluginAction("legacy_preview",JSONObject().put("url","https://revenge.nexpid.xyz/"+slug+"/manifest.json"))},top=8)
+        }
+        eyebrow(parent,"WEITERE KATALOGE")
+        card(parent,top=8){
+            add(this,label("Revenge Plugins",16f,whiteColor,true))
+            add(this,button("Nexpid-Katalog öffnen"){openWeb("https://github.com/nexpid/RevengePlugins")},top=8)
+            add(this,button("Revenge Next Archiv"){openWeb("https://github.com/revenge-mod/revenge-community-plugins")},top=7)
         }
     }
 
@@ -963,20 +1117,19 @@ class ValancedXActivity : Activity() {
         add(parent, label("Plugins", 27f, whiteColor, true), top = 4)
         add(parent, label("Installieren, verwalten und Quellen hinzufügen.", 13f, mutedColor), top = 5)
         val nav = LinearLayout(this).apply { background = rounded(surfaceColor, borderColor, 15); setPadding(dp(3),dp(3),dp(3),dp(3)) }
-        for ((i, text) in arrayOf("Installiert", "Entdecken", "Quellen", "Themes").withIndex()) {
+        for ((i, text) in arrayOf("Installiert", "Entdecken", "Quellen", "Legacy").withIndex()) {
             nav.addView(label(text, 12f, if (pluginPage == i) whiteColor else mutedColor, true).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(2), dp(12), dp(2), dp(12))
                 background = interactive(if (pluginPage == i) raisedColor else surfaceColor, borderColor, 12)
                 setOnClickListener {
                     pluginPage=i;pluginQuery="";render()
-                    if(i!=3&&pluginData==null&&pluginJob==null) pluginAction("snapshot")
+                    if(pluginData==null&&pluginJob==null) pluginAction("snapshot")
                 }
             }, LinearLayout.LayoutParams(0,-2,1f))
         }
         add(parent, nav, top = 15)
         discoveryControls.clear()
-        if(pluginPage==3) { themeScreen(parent); return }
         // The list stays mounted while an individual plugin is installing.
         if (pluginNote.isNotBlank() && pluginPage != 1)
             add(parent, label(pluginNote, 12f, if (pluginJob != null) accentColor else mutedColor), top = 10)
@@ -996,6 +1149,7 @@ class ValancedXActivity : Activity() {
             }, top = 8)
             return
         }
+        if(pluginPage==3){legacyScreen(parent);return}
         val actions = LinearLayout(this)
         actions.addView(button("Aktualisieren") { pluginAction(if (pluginPage == 0) "snapshot" else "refresh") }, LinearLayout.LayoutParams(0,-2,1f))
         actions.addView(button("Discord öffnen") { openDiscord() }, LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin = dp(6) })
@@ -1108,11 +1262,12 @@ class ValancedXActivity : Activity() {
                 setOnClickListener { action() }
             }
         header.addView(headerIcon("theme","Themes") {
-            currentTab=2;pluginPage=3;render()
+            currentTab=3;themePage=1;render()
         },LinearLayout.LayoutParams(dp(40),dp(42)).apply { rightMargin=dp(6) })
         header.addView(headerIcon("refresh","Aktualisieren") {
             connectionGranted=grantConnection()
-            if(currentTab==2&&pluginPage!=3&&pluginJob==null) pluginAction(if(pluginPage==0) "snapshot" else "refresh")
+            if(currentTab==3&&themePage==0&&pluginJob==null) pluginAction("theme_snapshot")
+            else if(currentTab==2&&pluginJob==null) pluginAction(if(pluginPage==0) "snapshot" else "refresh")
             else render(preserveScroll=true)
         },LinearLayout.LayoutParams(dp(40),dp(42)))
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
@@ -1129,7 +1284,8 @@ class ValancedXActivity : Activity() {
             0 -> dashboard(page)
             1 -> modules(page)
             2 -> pluginScreen(page)
-            3 -> diagnostics(page)
+            3 -> themesPage(page)
+            4 -> diagnostics(page)
             else -> about(page)
         }
         val navigation = LinearLayout(this).apply {
@@ -1137,7 +1293,7 @@ class ValancedXActivity : Activity() {
             background = rounded(surfaceColor, borderColor, 22)
             setPadding(dp(5), dp(5), dp(5), dp(5))
         }
-        val symbols = arrayOf("home", "module", "plugins", "diagnose", "info")
+        val symbols = arrayOf("home", "module", "plugins", "theme", "diagnose", "info")
         for (index in tabs.indices) {
             val selected = index == currentTab
             val cell = column().apply {
@@ -1151,11 +1307,13 @@ class ValancedXActivity : Activity() {
                 contentDescription = tabs[index]
                 addView(VxIcon(this@ValancedXActivity,symbols[index],if(selected) accentColor else mutedColor),
                     LinearLayout.LayoutParams(dp(24),dp(24)))
-                add(this, label(tabs[index], 11f, if (selected) whiteColor else mutedColor, selected).apply {
+                add(this, label(tabs[index], 10f, if (selected) whiteColor else mutedColor, selected).apply {
+                    maxLines=1
+                    ellipsize=android.text.TextUtils.TruncateAt.END
                     gravity = Gravity.CENTER
                 }, top = 2)
                 setOnClickListener {
-                    if (currentTab != index) { currentTab = index; render(); if (index == 2 && pluginPage != 3 && pluginData == null && pluginJob == null) pluginAction("snapshot") }
+                    if (currentTab != index) { currentTab = index; render(); if (index == 2 && pluginData == null && pluginJob == null) pluginAction("snapshot"); if(index==3&&themePage==0&&discordThemeState==null&&pluginJob==null)pluginAction("theme_snapshot") }
                 }
             }
             navigation.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))

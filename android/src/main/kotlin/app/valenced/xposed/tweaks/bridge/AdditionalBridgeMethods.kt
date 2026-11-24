@@ -5,12 +5,17 @@ import app.valenced.reloadApp
 import app.valenced.xposed.api.registerNativeMethod
 import app.valenced.xposed.openFileGuarded
 import app.valenced.xposed.tweak
+import app.valenced.xposed.tweaks.plugins.ManagerPluginWorker
 import java.io.File
 
 /**
  * `valenced.fs.*` + `valenced.app.*` bridge methods.
  */
 val additionalBridgeMethods by tweak {
+    registerNativeMethod("valancedx.manager.themesReady") {
+        ManagerPluginWorker.markThemesReady()
+        null
+    }
     registerNativeMethod("valenced.app.reload") {
         reloadApp()
     }
