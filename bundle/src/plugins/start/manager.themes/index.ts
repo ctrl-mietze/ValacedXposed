@@ -304,17 +304,17 @@ async function poll(){
     if(polling)return
     polling=true
     try{
-        const raw=native('valancedx.manager.themeClaim',[])
+        const raw=native('vexcord.manager.themeClaim',[])
         if(!raw)return
         const request=JSON.parse(raw)
         let result:any
         try{result=await command(request.operation,request.data)}
         catch(e){result={error:e instanceof Error?e.message:String(e)}}
-        native('valancedx.manager.themeFinish',[request.id,JSON.stringify(result)])
+        native('vexcord.manager.themeFinish',[request.id,JSON.stringify(result)])
     }catch(e){nativeLoggingHook('[ValancedX Theme] '+String(e),2)}finally{polling=false}
 }
 registerManagerThemeWake(()=>{void poll()})
-try {native('valancedx.manager.themesReady',[])} catch(e) {
+try {native('vexcord.manager.themesReady',[])} catch(e) {
     nativeLoggingHook('[ValancedX Theme] Cannot announce dispatcher: '+String(e),2)
 }
 registerInternalPlugin(manifest,{

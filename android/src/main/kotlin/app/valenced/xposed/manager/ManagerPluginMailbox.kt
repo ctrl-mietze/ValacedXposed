@@ -29,7 +29,7 @@ internal object ManagerPluginMailbox {
     @Synchronized fun outdatedWorker() {
         val job=current ?: return
         if(!job.claimed&&job.result==null) {
-            job.result=JSONObject().put("error","Discord nutzt noch die vorige ValancedX-Version. Discord vollständig neu starten.").toString()
+            job.result=JSONObject().put("error","Discord nutzt noch die vorige Vexcord-Version. Discord vollständig neu starten.").toString()
         }
     }
     @Synchronized fun claim(): Bundle {

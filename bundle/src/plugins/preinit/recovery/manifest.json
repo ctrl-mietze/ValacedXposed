@@ -1,7 +1,7 @@
 {
     "id": "valenced.recovery",
     "name": "Recovery",
-    "description": "Handles errors and provides troubleshooting options for ValancedX.",
+    "description": "Handles errors and provides troubleshooting options for Vexcord.",
     "author": {
         "name": "Valenced",
         "links": [

@@ -1,3 +1,4 @@
+import type { VexcordScope } from './vexcord/contracts'
 import type { PluginApiComponents } from '@valenced/components/types'
 import type { FunctionComponent } from 'react'
 import type {
@@ -125,6 +126,8 @@ export interface InitPluginApi<
 export interface PluginApi<
     O extends PluginApiExtensionsOptions = PluginApiExtensionsOptions,
 > extends InitPluginApi<O> {
+    /** Additive Vexcord SDK, available during start/stop. */
+    vexcord: VexcordScope
     decorate: PluginDecorateApi<O, 'Start'>
     unscoped: UnscopedPluginApi
     plugin: Plugin<O, 'Start'>

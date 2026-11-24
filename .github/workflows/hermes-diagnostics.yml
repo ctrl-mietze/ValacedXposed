@@ -25,7 +25,7 @@ jobs:
       - name: Upload line-numbered source and manifest
         uses: actions/upload-artifact@v4
         with:
-          name: valancedx-release-js-diagnostics
+          name: vexcord-release-js-diagnostics
           path: |
             bundle/build/diagnostics/valenced.js
             bundle/build/diagnostics/manifest.json

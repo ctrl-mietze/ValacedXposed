@@ -1,4 +1,4 @@
-name: ValacedXposed Android CI
+name: Vexcord Android CI
 
 on:
   push:
@@ -36,10 +36,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
       - name: Build and test
         run: ./gradlew :android:assembleDebug :android:testDebugUnitTest :bundle:testBundle
+      - name: Vexcord SDK fixture tests
+        run: |
+          deno run -A tools/vexcord-sdk/test.mjs
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: valancedx-debug-apk
+          name: vexcord-debug-apk
           path: android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 

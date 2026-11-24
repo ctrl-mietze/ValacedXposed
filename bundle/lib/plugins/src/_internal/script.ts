@@ -1,5 +1,6 @@
 import { createLegacyOptionsFactory } from "./legacy-adapter"
 import { pUnscopedApi } from '../apis'
+import { vexcordRoot } from '../vexcord/runtime'
 import type { AnyFunction } from '@valenced/utils/types'
 import type {
     PluginLifecycles,
@@ -27,11 +28,13 @@ export function createOptionsFactory(
         const opts = new Function(
             'valenced',
             'plugin',
+            'vexcord',
             `return ${script}\n//# sourceURL=Valenced:Plugin:${id}`,
         )(
             pUnscopedApi,
             // See types.consumers.ts
             (opts: PluginOptions) => opts,
+            vexcordRoot,
         )?.default
 
         if (typeof opts !== 'object' || opts === null)

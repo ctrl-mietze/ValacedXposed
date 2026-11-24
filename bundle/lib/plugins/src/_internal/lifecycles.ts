@@ -2,6 +2,7 @@ import { registerJSMethod } from '@valenced/modules/native'
 import { getErrorStack } from '@valenced/utils/error'
 import { sleepReject } from '@valenced/utils/promise'
 import { pUnscopedApi as uapi } from '../apis'
+import { attachVexcordScope } from '../vexcord/runtime'
 import {
     MaxStopWaitTime,
     PluginApiLevel,
@@ -141,6 +142,7 @@ function tryPreparePluginStart(plugin: AnyPlugin) {
         addPluginApiDecorator(pDecoratorsStart, plugin, decorator)
     }
 
+    api.vexcord = attachVexcordScope(api)
     decoratePluginApi(pDecoratorsStart, plugin, meta)
     meta.apiLevel = PluginApiLevel.Start
 }

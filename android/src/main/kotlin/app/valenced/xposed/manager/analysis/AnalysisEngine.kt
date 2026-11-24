@@ -112,8 +112,10 @@ internal object AnalysisEngine {
         var revenge=vendetta,bunny=vendetta;
         var valenced={patcher:__patcher,react:{React:__react},modules:{finders:__finders},discord:{},assets:{}};
         function plugin(options){return options;}
+        var vexcord={name:'Vexcord',apiVersion:1,definePlugin:plugin,runtimeInfo:function(){return {name:'Vexcord',apiVersion:1,version:'sandbox',platform:'android',compatibility:'valenced-v1'};}};
+        var __vx={id:'sandbox',apiVersion:1,onCleanup:__patch,modules:{observe:__patch},hooks:{before:__patch,after:__patch},events:{observe:__patch},messages:{transformOutgoing:__patch,transformEdit:__patch},storage:{open:function(name,defaults){__event('Vexcord Speicher angefordert');return {get:function(){return defaults;},set:__noop,replace:__noop,subscribe:__patch};}}};
         var console=__log;
-        var __api={cleanup:__noop,plugin:{manifest:{id:'sandbox'},reportError:__noop,requireReload:__noop},unscoped:valenced,jsonStorage:{cache:{}}};
+        var __api={vexcord:__vx,cleanup:__noop,plugin:{manifest:{id:'sandbox'},reportError:__noop,requireReload:__noop},unscoped:valenced,jsonStorage:{cache:{}}};
         function __run(candidate){
             var p=candidate && (candidate.default||candidate);
             if(!p||typeof p!=='object')return 'Kein unterstützter Plugin-Export';

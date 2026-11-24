@@ -100,7 +100,7 @@ internal class VxThemePreview(context: Context, private val theme: VxTheme,
         box(14f,14f,25f,25f,7f,theme.raised)
         p.color=theme.accent;p.strokeWidth=2.8f;p.strokeCap=Paint.Cap.ROUND
         canvas.drawLine(20f,20f,33f,33f,p);p.color=theme.secondary;canvas.drawLine(33f,20f,20f,33f,p)
-        text("ValancedX",48f,25f,15f,theme.text,true)
+        text("Vexcord",48f,25f,15f,theme.text,true)
         text("XPOSED / MANAGER",48f,37f,7.5f,theme.muted)
         val cardY=51f;val cardH=(h-96f).coerceAtLeast(40f)
         if(glow) box(10f,cardY-2,300f,cardH+4,radius/2f+2,VxThemes.blend(theme.background,theme.accent,.28f))

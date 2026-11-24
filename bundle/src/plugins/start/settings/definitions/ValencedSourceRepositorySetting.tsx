@@ -7,9 +7,9 @@ const ValencedSourceRepositorySetting: SettingsItem = {
     parent: Setting.Valenced,
     IconComponent: () => <TableRowAssetIcon name="PaperIcon" />,
     useTitle: () => 'Source Code',
-    useDescription: () => __BUILD_SOURCE_REPOSITORY_URL__,
+    useDescription: () => 'https://github.com/ctrl-mietze/Vexcord',
     onPress: () => {
-        Linking.openURL(__BUILD_SOURCE_REPOSITORY_URL__)
+        Linking.openURL('https://github.com/ctrl-mietze/Vexcord')
     },
     type: 'pressable',
 }

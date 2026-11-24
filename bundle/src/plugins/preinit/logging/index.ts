@@ -28,7 +28,7 @@ if (__DEV__) {
                 performance.now() - tsInit,
             )
             logger.log(
-                `ValancedX · Xposed enhancements ready. (${FullVersion} (${BuildEnvironment}))`,
+                `Vexcord · Xposed enhancements ready. (${FullVersion} (${BuildEnvironment}))`,
             )
         },
     })

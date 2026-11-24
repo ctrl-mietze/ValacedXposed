@@ -1,7 +1,7 @@
 {
     "id": "valenced.settings.plugins",
     "name": "Plugin Settings",
-    "description": "Plugin management UI for ValancedX.",
+    "description": "Plugin management UI for Vexcord.",
     "author": {
         "name": "Valenced",
         "links": [

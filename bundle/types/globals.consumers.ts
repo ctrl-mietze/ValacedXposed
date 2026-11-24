@@ -1,3 +1,4 @@
+import type { VexcordRoot } from '../lib/plugins/src/vexcord/contracts'
 import type {
     PluginApiExtensionsOptions,
     PluginOptions,
@@ -7,6 +8,9 @@ import type {
 } from '@valenced/plugins/types'
 
 declare global {
+    /** Vexcord SDK v1 root. Available to normal external plugin bundles. */
+    export const vexcord: VexcordRoot
+
     /**
      * Defines an entrypoint for a Valenced JS plugin.
      */

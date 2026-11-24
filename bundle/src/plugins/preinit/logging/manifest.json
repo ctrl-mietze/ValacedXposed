@@ -1,7 +1,7 @@
 {
     "id": "valenced.logging",
     "name": "Logging",
-    "description": "Logs assisting ValancedX developers.",
+    "description": "Logs assisting Vexcord developers.",
     "author": {
         "name": "Valenced",
         "links": [

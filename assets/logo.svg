@@ -1,9 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240" viewBox="0 0 640 240" role="img" aria-labelledby="title">
-<title>ValancedX – original project mark</title>
-<rect x="8" y="8" width="224" height="224" rx="48" fill="#111527"/>
-<path d="M64 54 175 184" fill="none" stroke="#AF9BFF" stroke-width="24" stroke-linecap="round"/>
-<path d="M176 54 65 184" fill="none" stroke="#6DE5CB" stroke-width="24" stroke-linecap="round"/>
-<rect x="112" y="112" width="16" height="16" rx="3" fill="#fff"/>
-<text x="265" y="132" fill="#F3F1FF" font-family="Arial,sans-serif" font-size="60" font-weight="700">ValancedX</text>
-<text x="268" y="173" fill="#AB9FCE" font-family="Arial,sans-serif" font-size="21" letter-spacing="4">XPOSED ONLY</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108" role="img" aria-label="Vexcord">
+ <rect width="108" height="108" rx="25" fill="#101321"/>
+ <path d="M15 30H45L54 48 64 30H94L54 90Z" fill="#25213f"/>
+ <path d="M25 27L54 79 83 27" fill="none" stroke="#c0aaff" stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
+ <path d="M55 57L71 29" fill="none" stroke="#72e5cf" stroke-width="8" stroke-linecap="round"/>
+ <rect x="50" y="50" width="8" height="8" rx="1" fill="#f3efff"/>
 </svg>

@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "id": "example.vexcord.hello",
+  "name": "Vexcord SDK Example",
+  "description": "Opt-in local text transformation for SDK demonstration.",
+  "author": "Veyra",
+  "version": "1.0.0",
+  "icon": "PuzzlePieceIcon",
+  "dependencies": {
+    "valenced.api": { "version": ">=1 <2" },
+    "discord": { "version": "*" }
+  },
+  "dist": { "script": "index.js" }
+}

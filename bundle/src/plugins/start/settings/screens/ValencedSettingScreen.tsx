@@ -5,7 +5,7 @@ import { Setting } from '../constants'
 
 const { Card, Stack, Text } = Design
 
-/** Discord-side settings, separate from the Android ValancedX manager. */
+/** Discord-side settings, separate from the Android Vexcord manager. */
 export default function ValencedSettingScreen() {
     return (
         <ScrollView style={{ flex: 1 }}>
@@ -14,13 +14,13 @@ export default function ValencedSettingScreen() {
                     <Card style={{ padding: 18 }}>
                         <Stack spacing={7}>
                             <Text variant="heading-lg/semibold" color="text-strong">
-                                ValancedX
+                                Vexcord
                             </Text>
                             <Text variant="text-md/medium">
                                 Xposed-powered enhancements for your existing Discord app.
                             </Text>
                             <Text variant="text-sm/medium">
-                                Configure the native hook and see diagnostics in the ValancedX Manager.
+                                Configure the native hook and see diagnostics in the Vexcord Manager.
                             </Text>
                         </Stack>
                     </Card>
@@ -31,7 +31,7 @@ export default function ValencedSettingScreen() {
                             type: 'list',
                             sections: [
                                 {
-                                    label: 'ValancedX',
+                                    label: 'Vexcord',
                                     settings: [
                                         Setting.ValencedVersion,
                                         Setting.LoaderVersion,

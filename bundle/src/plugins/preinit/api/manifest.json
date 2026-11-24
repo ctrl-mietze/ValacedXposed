@@ -1,7 +1,7 @@
 {
     "id": "valenced.api",
     "name": "Plugin API",
-    "description": "Provides the ValancedX plugin API.",
+    "description": "Provides the Vexcord plugin API.",
     "author": {
         "name": "Valenced",
         "links": [

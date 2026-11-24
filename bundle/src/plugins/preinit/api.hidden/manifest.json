@@ -1,7 +1,7 @@
 {
     "id": "valenced.api.hidden",
     "name": "Developer Mode",
-    "description": "Exposes internal ValancedX APIs for debugging.",
+    "description": "Exposes internal Vexcord APIs for debugging.",
     "author": {
         "name": "Valenced",
         "links": [

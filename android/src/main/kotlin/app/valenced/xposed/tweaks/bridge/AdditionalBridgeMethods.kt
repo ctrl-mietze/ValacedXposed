@@ -14,6 +14,10 @@ import java.io.File
  * `valenced.fs.*` + `valenced.app.*` bridge methods.
  */
 val additionalBridgeMethods by tweak {
+    registerNativeMethod("vexcord.runtime.info") {
+        mapOf("name" to "Vexcord","apiVersion" to 1,"version" to app.valenced.xposed.BuildConfig.VERSION_NAME,
+            "platform" to "android","compatibility" to "valenced-v1")
+    }
     registerNativeMethod("valancedx.compiler.state") { args ->
         CompilerRuntimeState.report(args.getOrNull(0) as? String ?: "",args.getOrNull(1) as? String ?: "")
         null
@@ -24,6 +28,19 @@ val additionalBridgeMethods by tweak {
         null
     }
     registerNativeMethod("valancedx.manager.themesReady") {
+        ManagerThemeRequests.markReady()
+        null
+    }
+    registerNativeMethod("vexcord.compiler.state") { args ->
+        CompilerRuntimeState.report(args.getOrNull(0) as? String ?: "",args.getOrNull(1) as? String ?: "")
+        null
+    }
+    registerNativeMethod("vexcord.manager.themeClaim") { ManagerThemeRequests.claim() }
+    registerNativeMethod("vexcord.manager.themeFinish") { args ->
+        ManagerThemeRequests.finish(args.getOrNull(0) as? String ?: "",args.getOrNull(1) as? String ?: "")
+        null
+    }
+    registerNativeMethod("vexcord.manager.themesReady") {
         ManagerThemeRequests.markReady()
         null
     }

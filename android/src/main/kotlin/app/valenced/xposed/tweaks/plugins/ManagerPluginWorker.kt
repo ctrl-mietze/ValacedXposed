@@ -125,7 +125,7 @@ internal object ManagerPluginWorker {
                         val result = try {
                             val config = ModuleSettings.current()
                             check(HookPolicy.resolve(config.enabled, config.javascriptEnabled, config.safeMode) == HookMode.FULL) {
-                                "ValancedX befindet sich im deaktivierten oder Recovery-Modus."
+                                "Vexcord befindet sich im deaktivierten oder Recovery-Modus."
                             }
                             withTimeout(105_000L) {
                                 withContext(ManagerPluginProgress { stage, percent ->

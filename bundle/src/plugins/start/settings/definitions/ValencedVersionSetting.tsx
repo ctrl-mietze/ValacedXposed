@@ -9,7 +9,7 @@ const ValencedVersionSetting: SettingsItem = CopyableSetting(
     {
         parent: Setting.Valenced,
         IconComponent: () => <TableRowAssetIcon id={ValencedIcon} />,
-        useTitle: () => 'ValancedX',
+        useTitle: () => 'Vexcord',
     },
     () => `${FullVersion} (${BuildEnvironment})`,
 )

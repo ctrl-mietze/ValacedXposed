@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="410" viewBox="0 0 1200 410" role="img" aria-label="Vexcord — mobile extension framework">
+ <defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101321"/><stop offset="1" stop-color="#080b12"/></linearGradient>
+  <radialGradient id="glow"><stop stop-color="#7354bc" stop-opacity=".4"/><stop offset="1" stop-color="#7354bc" stop-opacity="0"/></radialGradient>
+  <linearGradient id="line"><stop stop-color="#c0aaff"/><stop offset="1" stop-color="#72e5cf"/></linearGradient>
+  <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#c0aaff" stroke-opacity=".06"/></pattern>
+ </defs>
+ <rect width="1200" height="410" rx="26" fill="url(#bg)"/>
+ <rect width="1200" height="410" rx="26" fill="url(#grid)"/>
+ <ellipse cx="935" cy="160" rx="430" ry="350" fill="url(#glow)"/>
+ <rect x="1" y="1" width="1198" height="408" rx="25" fill="none" stroke="#45405a"/>
+ <g transform="translate(58 55)">
+  <rect width="90" height="90" rx="21" fill="#181b2c" stroke="#49405e"/>
+  <path d="M19 22L45 68 71 22" fill="none" stroke="#c0aaff" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M46 48L61 22" fill="none" stroke="#72e5cf" stroke-width="7" stroke-linecap="round"/>
+ </g>
+ <text x="166" y="100" fill="#9b92b5" font-family="ui-monospace,monospace" font-size="17" letter-spacing="4">VEYRA / MOBILE FRAMEWORK</text>
+ <text x="163" y="182" fill="#f5f1ff" font-family="system-ui,sans-serif" font-weight="800" font-size="77" letter-spacing="-3">Vexcord</text>
+ <rect x="167" y="208" width="470" height="3" rx="1.5" fill="url(#line)"/>
+ <text x="166" y="246" fill="#c9c3d8" font-family="system-ui,sans-serif" font-size="23">Your client. Your plugins. Your style.</text>
+ <text x="166" y="282" fill="#8e97ac" font-family="system-ui,sans-serif" font-size="18">Android · Xposed · Hermes · Vencord Compiler</text>
+ <g font-family="ui-monospace,monospace" font-size="15">
+  <rect x="166" y="315" width="126" height="35" rx="8" fill="#25213f" stroke="#54476e"/><text x="185" y="337" fill="#d6c7ff">SDK / v1</text>
+  <rect x="305" y="315" width="138" height="35" rx="8" fill="#102c2c" stroke="#315c56"/><text x="323" y="337" fill="#8ee3d1">GPL-3.0</text>
+  <rect x="456" y="315" width="173" height="35" rx="8" fill="#1c202d" stroke="#3c4557"/><text x="473" y="337" fill="#cbd0de">COMPAT READY</text>
+ </g>
+ <g transform="translate(785 65)">
+  <rect width="350" height="280" rx="17" fill="#0d111c" stroke="#4a425e" stroke-width="1.5"/>
+  <circle cx="20" cy="20" r="4" fill="#c0aaff"/><circle cx="35" cy="20" r="4" fill="#72e5cf"/><circle cx="50" cy="20" r="4" fill="#637085"/>
+  <text x="330" y="24" text-anchor="end" fill="#8d96a9" font-family="ui-monospace,monospace" font-size="12">runtime / android</text>
+  <path d="M0 42H350" stroke="#343747"/>
+  <g font-family="ui-monospace,monospace" font-size="16">
+   <text x="23" y="78" fill="#c0aaff">vexcord.definePlugin({</text>
+   <text x="42" y="110" fill="#e9e5f4">start(api) {</text>
+   <text x="61" y="142" fill="#72e5cf">api.vexcord.hooks</text>
+   <text x="61" y="174" fill="#72e5cf">api.vexcord.storage</text>
+   <text x="61" y="206" fill="#72e5cf">api.vexcord.messages</text>
+   <text x="42" y="238" fill="#e9e5f4">}</text>
+   <text x="23" y="262" fill="#c0aaff">})</text>
+  </g>
+ </g>
+</svg>

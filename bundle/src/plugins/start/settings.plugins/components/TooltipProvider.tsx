@@ -31,7 +31,7 @@ export type PluginTooltip = (typeof PluginTooltip)[keyof typeof PluginTooltip]
 const Labels: Record<PluginTooltip, string> = {
     [PluginTooltip.Start]: 'Plugin must be started first',
     [PluginTooltip.Essential]:
-        'Essential to ValancedX runtime',
+        'Essential to Vexcord runtime',
     [PluginTooltip.PendingUpdate]:
         'Plugin has a pending update, reload to apply it',
     [PluginTooltip.ControlBlocked]:

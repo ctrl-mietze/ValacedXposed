@@ -1,4 +1,4 @@
-/** Independent ValancedX reimplementations of classic local UI features. */
+/** Independent Vexcord reimplementations of classic local UI features. */
 export function imageLinks(row:any){
     const message=row?.message
     if(row?.type!==1||!message||!Array.isArray(message.content)||message.content.length!==0||!Array.isArray(message.embeds))return row

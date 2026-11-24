@@ -20,5 +20,5 @@ export const Setting = {
 } as const
 
 export const RouteNames = {
-    [Setting.Valenced]: 'ValancedX',
+    [Setting.Valenced]: 'Vexcord',
 } as const

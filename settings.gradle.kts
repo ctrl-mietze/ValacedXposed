@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ValacedXposed"
+rootProject.name = "Vexcord"
 include(":android")
 include(":android:api")
 include(":bundle")

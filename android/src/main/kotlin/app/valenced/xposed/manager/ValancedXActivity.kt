@@ -503,9 +503,9 @@ class ValancedXActivity : Activity() {
         }
         eyebrow(parent, "Hook-Konfiguration")
         card(parent) {
-            setting(this, "ValancedX-Erweiterungen", "Steuert die Hermes-Injektion. Der native Xposed-Hook wird früh registriert.", "hook_enabled", true)
+            setting(this, "Vexcord-Erweiterungen", "Steuert die Hermes-Injektion. Der native Xposed-Hook wird früh registriert.", "hook_enabled", true)
             line(this)
-            setting(this, "Hermes-Bundle", "Lädt den ValancedX-Code vor Discords eigener JavaScript-Datei.", "javascript_enabled", true)
+            setting(this, "Hermes-Bundle", "Lädt den Vexcord-Code vor Discords eigener JavaScript-Datei.", "javascript_enabled", true)
             line(this)
             setting(this, "Recovery-Modus", "Verhindert das Hermes-Bundle; die frühe native Hook-Registrierung bleibt erhalten.", "safe_mode", false)
         }
@@ -600,9 +600,9 @@ class ValancedXActivity : Activity() {
     }
 
     private fun about(parent: LinearLayout) {
-        eyebrow(parent, "Über ValancedX")
+        eyebrow(parent, "Über Vexcord")
         card(parent, tint = surfaceColor) {
-            add(this, label("ValancedX", 25f, whiteColor, true))
+            add(this, label("Vexcord", 25f, whiteColor, true))
             add(this, label("Release " + BuildConfig.VERSION_NAME, 13f, accentColor), top = 6)
             add(
                 this,
@@ -614,30 +614,32 @@ class ValancedXActivity : Activity() {
                 top = 16,
             )
             add(this, label("Paket: " + BuildConfig.APPLICATION_ID, 12f, mutedColor), top = 15)
+            add(this, label("Vexcord SDK v1 · Valenced Compatibility ABI",12f,mintColor),top=6)
         }
         eyebrow(parent, "Open Source")
         card(parent) {
             add(
                 this,
                 label(
-                    "ValacedXposed basiert auf dem quelloffenen Valenced-Core (GPL-3.0). " +
-                    "Die neue Manager-Oberfläche und Projekt-Bildmarke sind eigenständig gestaltet.",
+                    "Vexcord basiert auf dem quelloffenen Valenced-Core (GPL-3.0). " +
+                    "Eigene Vexcord SDK v1, Compiler und Manager-Oberfläche. Bestehende Valenced-Plugins bleiben kompatibel.",
                     13f, mutedColor,
                 ),
             )
             add(this, button("Quellcode auf GitHub") {
-                openWeb("https://github.com/ctrl-mietze/ValacedXposed")
+                openWeb("https://github.com/ctrl-mietze/Vexcord")
             }, top = 13)
             add(this, button("Aktuelle Releases") {
-                openWeb("https://github.com/ctrl-mietze/ValacedXposed/releases")
+                openWeb("https://github.com/ctrl-mietze/Vexcord/releases")
             }, top = 9)
+            add(this, button("Vexcord SDK & API") { openWeb("https://github.com/ctrl-mietze/Vexcord/blob/main/docs/SDK.md") }, top = 9)
             add(this, button("Einrichtungshilfe") { showSetup() }, top = 9)
         }
     }
 
     private fun report(): String {
         val values = mutableListOf(
-            "ValancedX " + BuildConfig.VERSION_NAME,
+            "Vexcord " + BuildConfig.VERSION_NAME,
             "Paket: " + BuildConfig.APPLICATION_ID,
             "Discord: " + (discordVersion() ?: "nicht installiert"),
             "Status: " + statusLabel(),
@@ -663,14 +665,14 @@ class ValancedXActivity : Activity() {
 
     private fun copyDiagnostics() {
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("ValancedX Diagnose", report()))
+        clipboard.setPrimaryClip(ClipData.newPlainText("Vexcord Diagnose", report()))
         Toast.makeText(this, "Bericht kopiert", Toast.LENGTH_SHORT).show()
     }
 
     private fun shareDiagnostics() {
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "ValancedX Diagnostics")
+            putExtra(Intent.EXTRA_SUBJECT, "Vexcord Diagnostics")
             putExtra(Intent.EXTRA_TEXT, report())
         }, "Diagnose teilen"))
     }
@@ -694,9 +696,9 @@ class ValancedXActivity : Activity() {
 
     private fun showWelcome() {
         AlertDialog.Builder(this)
-            .setTitle("Willkommen bei ValancedX")
+            .setTitle("Willkommen bei Vexcord")
             .setMessage(
-                "Discord bleibt unverändert installiert. ValancedX läuft über Xposed.\n\n" +
+                "Discord bleibt unverändert installiert. Vexcord läuft über Xposed.\n\n" +
                 "Aktiviere das Modul im Framework, wähle com.discord als Scope " +
                 "und starte Discord neu. Die Diagnose basiert auf echten Ereignissen.",
             )
@@ -709,11 +711,11 @@ class ValancedXActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Xposed-Einrichtung")
             .setMessage(
-                "1. Im bereits installierten LSPosed-Modulmanager ValancedX öffnen.\n\n" +
-                "2. ValancedX im Framework aktivieren.\n\n" +
+                "1. Im bereits installierten LSPosed-Modulmanager Vexcord öffnen.\n\n" +
+                "2. Vexcord im Framework aktivieren.\n\n" +
                 "3. Ausschließlich com.discord als Scope wählen.\n\n" +
                 "4. Discord vollständig stoppen und neu starten.\n\n" +
-                "5. Unter Diagnose den Hook-Status prüfen. Wenn nichts erscheint, die LSPosed-Framework-Logs nach ValancedX durchsuchen.\n\n" +
+                "5. Unter Diagnose den Hook-Status prüfen. Wenn nichts erscheint, die LSPosed-Framework-Logs nach ValancedX (Kompatibilitäts-Tag) durchsuchen.\n\n" +
                 "Bei Problemen Recovery aktivieren. Es werden keine Discord-APKs gepatcht.",
             )
             .setPositiveButton("Fertig", null)
@@ -1041,7 +1043,7 @@ class ValancedXActivity : Activity() {
                 render(preserveScroll=true)
             },top=12)
         }
-        add(parent,label("Themes ändern die Oberfläche von ValancedX, nicht das Discord-Design.",12f,mutedColor),top=12)
+        add(parent,label("Themes ändern die Oberfläche von Vexcord, nicht das Discord-Design.",12f,mutedColor),top=12)
     }
 
 
@@ -1218,7 +1220,14 @@ class ValancedXActivity : Activity() {
         val suggested=listOf(
             Triple("Valenced Community","https://community.valenced.app/index.json","Offizieller Katalog"),
             Triple("dxckie-cell","https://dxckie-cell.github.io/valenced-plugins/index.json","Community"),
-            Triple("ndb1995","https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json","Community"))
+            Triple("ndb1995","https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json","Community"),
+            Triple("bleelblep","https://bleelblep.github.io/bleel-bazinga-repo/index.json","Community"),
+            Triple("hakuxyz","https://hakuxyz.github.io/valenced-plugins/index.json","Community"),
+            Triple("tralwdwd","https://valenced.tralwdwd.dev/index.json","Community"),
+            Triple("kmmiio99o","https://kmmiio99o.github.io/valenced-plugins/index.json","Community"),
+            Triple("benjiisworld","https://plugins.benjiisworld.com/index.json","Community"),
+            Triple("caramel3625","https://caramel3625.github.io/valenced-plugins/index.json","Community"),
+            Triple("mudrhiod","https://valenced.mudrhiod.me/index.json","Community"))
         card(parent,top=7){
             for((i,source) in suggested.withIndex()){
                 if(i>0)line(this)
@@ -1337,7 +1346,7 @@ class ValancedXActivity : Activity() {
     private fun themesPage(parent:LinearLayout) {
         eyebrow(parent,"APPEARANCE")
         add(parent,label("Themes",29f,whiteColor,true),top=4)
-        add(parent,label("Gestalte Discord und ValancedX getrennt.",13f,mutedColor),top=5)
+        add(parent,label("Gestalte Discord und Vexcord getrennt.",13f,mutedColor),top=5)
         segmented(parent,listOf("Discord","Manager"),themePage,{i->
             themePage=i;render()
             if(i==0&&discordThemeState==null&&pluginJob==null)pluginAction("theme_snapshot")
@@ -1702,7 +1711,7 @@ class ValancedXActivity : Activity() {
             text.append("\n\n").append(r.optString("disclaimer"))
         }
         AlertDialog.Builder(this).setTitle(item.optString("name","Plugin-Analyse")).setMessage(text.toString())
-            .setNeutralButton("Kopieren"){_,_->(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("ValancedX Plugin-Analyse",text.toString()))}
+            .setNeutralButton("Kopieren"){_,_->(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Vexcord Plugin-Analyse",text.toString()))}
             .setPositiveButton("Schließen",null).show()
     }
     private fun startAnalysis(items:List<JSONObject>,kind:String,show:Boolean=false,translate:Boolean=false){
@@ -2042,10 +2051,10 @@ class ValancedXActivity : Activity() {
         }
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.ic_valancedx)
-            contentDescription = "ValancedX"
+            contentDescription = "Vexcord"
         }, LinearLayout.LayoutParams(dp(43), dp(43)))
         val title = column().apply { setPadding(dp(11), 0, 0, 0) }
-        add(title, label("ValancedX", 23f, whiteColor, true))
+        add(title, label("Vexcord", 23f, whiteColor, true))
         add(title, label("XPOSED  /  " + BuildConfig.VERSION_NAME, 10f, mutedColor, true), top = 3)
         val link=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
         connectionDot=View(this)

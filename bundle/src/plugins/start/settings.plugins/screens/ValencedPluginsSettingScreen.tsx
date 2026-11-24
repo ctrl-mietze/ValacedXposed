@@ -103,7 +103,7 @@ const Filters: FilterAndSortActionSheetProps['filters'] = {
     },
     Internal: {
         icon: ValencedIcon,
-        desc: 'Included with ValancedX.',
+        desc: 'Included with Vexcord.',
         filter: (_, meta) => isPluginInternal(meta),
     },
 } satisfies FilterAndSortActionSheetProps['filters']

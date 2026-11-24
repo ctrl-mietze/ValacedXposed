@@ -1,4 +1,4 @@
-name: ValancedX Signed Release
+name: Vexcord Signed Release
 
 on:
   workflow_dispatch:
@@ -11,6 +11,9 @@ permissions:
 
 jobs:
   build_release:
+    # The old repository remains an authorized signing bridge until the original
+    # key is provisioned here by the maintainer. Never generate a replacement key.
+    if: vars.VEXCORD_SIGNING_READY == 'true' || github.repository == 'ctrl-mietze/ValacedXposed'
     name: Signed Android release
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -66,18 +69,19 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | head -n 5
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='ctrl.mietze.valacedxposed'"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "application-label:\x27Vexcord\x27"
           version="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' android/build.gradle.kts | head -n 1)"
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             test "$GITHUB_REF_NAME" = "v$version"
           fi
           mkdir -p dist
-          cp "$apk" "dist/ValancedX-v${version}-release.apk"
+          cp "$apk" "dist/Vexcord-v${version}-release.apk"
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
 
       - name: Upload verified signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: valancedx-signed-release
+          name: vexcord-signed-release
           path: |
             dist/*.apk
             dist/SHA256SUMS.txt
@@ -91,7 +95,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \
             --target "$GITHUB_SHA" \
-            --title "ValancedX ${GITHUB_REF_NAME#v}" \
+            --title "Vexcord ${GITHUB_REF_NAME#v}" \
             --notes-file "docs/RELEASE_${GITHUB_REF_NAME#v}.md" \
             --latest \
             dist/*.apk dist/SHA256SUMS.txt

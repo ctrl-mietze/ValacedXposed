@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible Vexcord problem
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Vexcord / Discord / Android versions
+      placeholder: "1.0.27 / 353.x / Android 16"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Actual and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized diagnostics (optional)
+      description: Remove account tokens, private messages, personal identifiers and signing information.

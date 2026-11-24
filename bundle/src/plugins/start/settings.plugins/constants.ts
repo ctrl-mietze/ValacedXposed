@@ -6,8 +6,8 @@ export const Setting = {
 } as const
 
 export const RouteNames = {
-    [Setting.ValencedPlugins]: 'ValancedX Plugins',
-    [Setting.ValencedPluginsAdvanced]: 'ValancedX Plugins Advanced',
+    [Setting.ValencedPlugins]: 'Vexcord Plugins',
+    [Setting.ValencedPluginsAdvanced]: 'Vexcord Plugins Advanced',
     [Setting.ValencedPluginsBrowse]: 'Browse Plugins',
     [Setting.ValencedPluginsUpdates]: 'Plugin Updates',
 } as const

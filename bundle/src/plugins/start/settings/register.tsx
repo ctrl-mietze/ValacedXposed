@@ -28,6 +28,6 @@ registerSettingsItems({
 })
 
 registerSettingsSection('VALENCED', {
-    label: 'ValancedX',
+    label: 'Vexcord',
     settings: [Setting.Valenced],
 })

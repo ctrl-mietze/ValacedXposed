@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">ValancedX</string>
-    <string name="xposed_description">ValancedX – Discord-Erweiterungen über Xposed und LSPosed. Originalclient, lokale Diagnose und Recovery-Modus.</string>
+    <string name="app_name">Vexcord</string>
+    <string name="xposed_description">Vexcord – Discord-Erweiterungen über Xposed und LSPosed. Originalclient, lokale Diagnose und Recovery-Modus.</string>
 </resources>
