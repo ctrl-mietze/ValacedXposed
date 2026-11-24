@@ -18,6 +18,9 @@ import app.valenced.xposed.tweaks.plugins.repos.refreshRepo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -26,6 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Native manager uses exactly the same plugin operations as the in-Discord UI.
  * No access to Discord messages, account data, scripts, or arbitrary bridge calls. */
+internal class ManagerPluginProgress(val report: (String, Int) -> Unit) :
+    AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<ManagerPluginProgress>
+}
+
 internal object ManagerPluginWorker {
     private const val PREFIX = "valenced.plugins."
     private val allow = setOf("planInstall", "install", "setEnabled", "uninstall")
@@ -57,7 +65,17 @@ internal object ManagerPluginWorker {
                                 "ValancedX befindet sich im deaktivierten oder Recovery-Modus."
                             }
                             withTimeout(105_000L) {
-                                handle(ctx, job.getString("operation").orEmpty(), JSONObject(job.getString("payload").orEmpty()))
+                                withContext(ManagerPluginProgress { stage, percent ->
+                                    runCatching {
+                                        ctx.contentResolver.call(uri, "plugin_progress", null, Bundle().apply {
+                                            putString("id", id)
+                                            putString("stage", stage)
+                                            putInt("percent", percent)
+                                        })
+                                    }
+                                }) {
+                                    handle(ctx, job.getString("operation").orEmpty(), JSONObject(job.getString("payload").orEmpty()))
+                                }
                             }
                         } catch (e: Exception) {
                             JSONObject().put("error", (e.message ?: e.javaClass.simpleName).take(1500))
@@ -98,7 +116,9 @@ internal object ManagerPluginWorker {
                 available.put(JSONObject().put("id", id).put("name", plugin.name.take(100))
                     .put("description", plugin.description.take(180)).put("author", plugin.author.take(80))
                     .put("version", version).put("repo", repo.url)
-                    .put("installed", pluginRegistry.factories.containsKey(id)))
+                    .put("installed", pluginRegistry.factories.containsKey(id))
+                    .put("installedVersion", pluginRegistry.factories[id]?.manifest?.version?.toString() ?: "")
+                    .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: ""))
             }
         }
         val active = PluginStatesStore.active
@@ -162,11 +182,13 @@ internal object ManagerPluginWorker {
                     else repos.map { if (it.url == url) it.copy(enabled = !it.enabled) else it })
                 return snapshot("Quellen gespeichert.")
             }
-            "plan" -> {
+            "plan", "install_direct" -> {
                 val id = data.getString("id")
                 requireValidPluginId(id)
                 val repo = data.getString("repo")
                 require(RepoStore.list().any { it.url == repo && it.enabled }) { "Quelle nicht aktiv." }
+                val progress = kotlin.coroutines.coroutineContext[ManagerPluginProgress]
+                progress?.report?.invoke("Abhängigkeiten prüfen", -1)
                 val plan = invoke("planInstall", id,
                     mapOf("targets" to mapOf(id to mapOf("repo" to repo, "compatible" to true)),
                         "skipMissingOptionals" to true)) as? Map<*, *> ?: error("Ungültiger Installationsplan.")
@@ -178,6 +200,22 @@ internal object ManagerPluginWorker {
                     require(item["url"].toString().startsWith("https://")) { "Unsicherer Download." }
                     summary.put(JSONObject().put("id", item["id"].toString())
                         .put("version", item["version"].toString()).put("repo", item["repo"].toString()))
+                }
+                if (op == "install_direct") {
+                    // A tap is the explicit install authorization. Do not silently
+                    // downgrade or break existing plugins to satisfy an install.
+                    val blockers = (plan["warnings"] as? List<*>).orEmpty()
+                        .mapNotNull { it as? Map<*, *> }
+                        .filter { it["type"] in setOf("downgrade", "breaks", "conflict") ||
+                            (it["type"] == "unresolved" && it["optional"] != true) }
+                    require(blockers.isEmpty()) {
+                        blockers.joinToString("\n") { it["message"].toString() }
+                    }
+                    if (actions.isEmpty()) return snapshot("Bereits installiert und aktuell.")
+                    progress?.report?.invoke("Download vorbereiten", 0)
+                    invoke("install", plan)
+                    progress?.report?.invoke("Installation abschließen", 100)
+                    return snapshot("Installation abgeschlossen. Neue Plugins bleiben deaktiviert.")
                 }
                 val token = UUID.randomUUID().toString()
                 preview = Preview(token, plan, SystemClock.elapsedRealtime())

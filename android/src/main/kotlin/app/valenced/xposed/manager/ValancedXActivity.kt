@@ -52,7 +52,7 @@ class ValancedXActivity : Activity() {
     private var scrollView: ScrollView? = null
     private var connectionGranted = false
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val refresh = Runnable { render(preserveScroll = true) }
+    private val refresh = Runnable { if (currentTab != 2) render(preserveScroll = true) }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key?.startsWith("last_") == true || key?.startsWith("total_") == true ||
             key == "event_history" || key == "error_streak") {
@@ -70,6 +70,12 @@ class ValancedXActivity : Activity() {
         window.statusBarColor = backgroundColor
         window.navigationBarColor = backgroundColor
         currentTab = (savedInstanceState?.getInt("tab") ?: 0).coerceIn(0, tabs.lastIndex)
+        pluginPage = savedInstanceState?.getInt("pluginPage") ?: 0
+        pluginQuery = savedInstanceState?.getString("pluginQuery").orEmpty()
+        pluginJob = savedInstanceState?.getString("pluginJob")
+        pluginTarget = savedInstanceState?.getString("pluginTarget")
+        pluginNote = savedInstanceState?.getString("pluginNote").orEmpty()
+        restoredScrollY = savedInstanceState?.getInt("scrollY") ?: 0
         if (!prefs.getBoolean("welcome_seen", false)) {
             prefs.edit().putBoolean("welcome_seen", true).apply()
             showWelcome()
@@ -80,7 +86,7 @@ class ValancedXActivity : Activity() {
         super.onResume()
         connectionGranted = grantConnection()
         prefs.registerOnSharedPreferenceChangeListener(listener)
-        render()
+        render(preserveScroll = true)
         if (pluginJob != null) mainHandler.post(pluginPoll)
     }
 
@@ -106,6 +112,12 @@ class ValancedXActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("tab", currentTab)
+        outState.putInt("pluginPage", pluginPage)
+        outState.putString("pluginQuery", pluginQuery)
+        outState.putString("pluginJob", pluginJob)
+        outState.putString("pluginTarget", pluginTarget)
+        outState.putString("pluginNote", pluginNote)
+        outState.putInt("scrollY", scrollView?.scrollY ?: 0)
         super.onSaveInstanceState(outState)
     }
 
@@ -553,21 +565,80 @@ class ValancedXActivity : Activity() {
 
     private var pluginPage = 0
     private var pluginQuery = ""
-    private var pluginData: JSONObject? = null
+    private var pluginData: JSONObject? = ManagerPluginMailbox.cachedSnapshot()?.let { runCatching { JSONObject(it) }.getOrNull() }
     private var pluginJob: String? = null
     private var pluginNote = ""
+    private var pluginTarget: String? = null
+    private var pluginFailedTarget: String? = null
+    private var restoredScrollY = 0
+    private data class DiscoveryControl(val button: TextView, val progress: ProgressBar, var visual: String = "", var percent: Int = -2)
+    private val discoveryControls = mutableMapOf<String, DiscoveryControl>()
+
+    private fun pluginKey(id: String, repo: String) = id + "|" + repo
+
+    private fun discoveryEntries(): Map<String, JSONObject> {
+        val entries = pluginData?.optJSONArray("available") ?: JSONArray()
+        return (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
+            .associateBy { pluginKey(it.optString("id"), it.optString("repo")) }
+    }
+
+    private fun updateDiscoveryControls() {
+        val entries = discoveryEntries()
+        val status = pluginJob?.let { ManagerPluginMailbox.status(it) }
+        for ((key, control) in discoveryControls) {
+            val item = entries[key] ?: continue
+            val active = pluginJob != null && pluginTarget == key
+            val pending = item.optString("pending")
+            val current = item.optString("installedVersion")
+            val version = item.optString("version")
+            val ready = pending.isNotEmpty() || (item.optBoolean("installed") && current == version)
+            val buttonText = when {
+                active -> if ((status?.second ?: -1) >= 0) "Installiere … " + status!!.second + "%" else status?.first ?: "Installiere …"
+                key == pluginFailedTarget -> "Erneut versuchen"
+                pending.isNotEmpty() -> "Update bereit"
+                ready -> "Installiert"
+                item.optBoolean("installed") -> "Aktualisieren"
+                else -> "Installieren"
+            }
+            val enabled = pluginJob == null && (!ready || key == pluginFailedTarget)
+            val success = ready && !active && key != pluginFailedTarget
+            val visual = "$buttonText|$enabled|$success|$active"
+            if (control.visual != visual) {
+                control.visual = visual
+                control.button.text = buttonText
+                control.button.isEnabled = enabled
+                control.button.alpha = if (enabled || active || ready) 1f else .55f
+                control.button.setTextColor(if (success) mintColor else backgroundColor)
+                control.button.background = if (success)
+                    interactive(raisedColor, borderColor, 13) else interactive(accentColor, accentColor, 13)
+                control.progress.visibility = if (active) View.VISIBLE else View.INVISIBLE
+            }
+            val percent = status?.second ?: -1
+            if (active && control.percent != percent) {
+                control.percent = percent
+                control.progress.isIndeterminate = percent < 0
+                if (percent >= 0) control.progress.progress = percent
+            }
+            if (!active) control.percent = -2
+        }
+    }
     private val pluginPoll = object : Runnable {
         override fun run() {
             val id = pluginJob ?: return
             val raw = ManagerPluginMailbox.result(id)
             if (raw == null) {
-                mainHandler.postDelayed(this, 600)
+                updateDiscoveryControls()
+                mainHandler.postDelayed(this, 350)
                 return
             }
+            val target = pluginTarget
             pluginJob = null
+            pluginTarget = null
             val result = runCatching { JSONObject(raw) }.getOrElse { JSONObject().put("error", "Ungültige Antwort") }
             if (result.has("error")) {
                 pluginNote = result.optString("error")
+                pluginFailedTarget = target
+                if (target != null) Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_LONG).show()
             } else if (result.has("token")) {
                 val actions = result.optJSONArray("actions") ?: JSONArray()
                 if (actions.length() == 0) {
@@ -591,9 +662,18 @@ class ValancedXActivity : Activity() {
                 }
             } else {
                 pluginData = result
+                pluginFailedTarget = null
                 pluginNote = result.optString("message")
+                if (target != null) Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_SHORT).show()
             }
-            if (currentTab == 2) render(preserveScroll = true)
+            if (currentTab == 2) {
+                if (target != null && pluginPage == 1 && discoveryControls.isNotEmpty()) {
+                    // Update the existing views, not the whole ScrollView.
+                    updateDiscoveryControls()
+                } else {
+                    render(preserveScroll = true)
+                }
+            }
         }
     }
 
@@ -603,11 +683,19 @@ class ValancedXActivity : Activity() {
         runCatching { ManagerPluginMailbox.submit(operation, data) }
             .onSuccess {
                 pluginJob = it
+                pluginTarget = if (operation == "install_direct") pluginKey(data.optString("id"), data.optString("repo")) else null
+                pluginFailedTarget = null
                 pluginNote = "Discord verarbeitet die Aktion …"
                 mainHandler.removeCallbacks(pluginPoll)
                 mainHandler.post(pluginPoll)
-            }.onFailure { pluginNote = it.message.orEmpty() }
-        if (currentTab == 2) render(preserveScroll = true)
+            }.onFailure {
+                pluginNote = it.message.orEmpty()
+                Toast.makeText(this, pluginNote, Toast.LENGTH_LONG).show()
+            }
+        if (currentTab == 2) {
+            if (operation == "install_direct" && pluginPage == 1) updateDiscoveryControls()
+            else render(preserveScroll = true)
+        }
     }
 
     private fun addPluginSource(url: String) {
@@ -644,8 +732,11 @@ class ValancedXActivity : Activity() {
             }, LinearLayout.LayoutParams(0,-2,1f))
         }
         add(parent, nav, top = 15)
-        if (pluginNote.isNotBlank()) add(parent, label(pluginNote, 12f, if (pluginJob != null) accentColor else mutedColor), top = 10)
-        if (pluginJob != null) {
+        discoveryControls.clear()
+        // The list stays mounted while an individual plugin is installing.
+        if (pluginNote.isNotBlank() && pluginPage != 1)
+            add(parent, label(pluginNote, 12f, if (pluginJob != null) accentColor else mutedColor), top = 10)
+        if (pluginJob != null && pluginTarget == null) {
             add(parent, ProgressBar(this).apply { isIndeterminate = true }, top = 6)
             add(parent, button("Discord öffnen") { openDiscord() }, top = 8)
             add(parent, button("Wartende Aktion abbrechen") {
@@ -658,6 +749,7 @@ class ValancedXActivity : Activity() {
         actions.addView(button("Aktualisieren") { pluginAction(if (pluginPage == 0) "snapshot" else "refresh") }, LinearLayout.LayoutParams(0,-2,1f))
         actions.addView(button("Discord öffnen") { openDiscord() }, LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin = dp(6) })
         add(parent, actions, top = 10)
+        if (pluginPage == 1) add(parent, label("Ein Tipp installiert das Plugin samt benötigter Abhängigkeiten. Nur vertrauenswürdige Quellen verwenden.", 11f, mutedColor), top = 8)
         if (pluginData == null) {
             add(parent, label("Öffne Discord einmal nach dem Update und aktualisiere dann die Liste. Der Manager nutzt die echte Plugin-Bridge.", 13f, mutedColor), top = 10)
         }
@@ -697,7 +789,6 @@ class ValancedXActivity : Activity() {
             return
         }
 
-        val entries = pluginData?.optJSONArray(if (pluginPage == 0) "installed" else "available") ?: JSONArray()
         val search = EditText(this).apply {
             hint = "Plugins suchen …"
             setText(pluginQuery)
@@ -712,6 +803,8 @@ class ValancedXActivity : Activity() {
         add(parent, list, top = 4)
         fun showEntries() {
             list.removeAllViews()
+            discoveryControls.clear()
+            val entries = pluginData?.optJSONArray(if (pluginPage == 0) "installed" else "available") ?: JSONArray()
             val filtered = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
                 .filter { item -> listOf("name","description","id","author").any { item.optString(it).contains(pluginQuery, ignoreCase = true) } }
                 .sortedBy { it.optString("name").lowercase(Locale.ROOT) }
@@ -741,12 +834,24 @@ class ValancedXActivity : Activity() {
                     } else {
                         val repo = item.optString("repo")
                         add(this,label(Uri.parse(repo).host ?: repo,11f,mutedColor),top=5)
-                        add(this,button(if (item.optBoolean("installed")) "Version prüfen" else "Installieren",true) {
-                            pluginAction("plan",JSONObject().put("id",id).put("repo",repo))
-                        },top=8)
+                        val install = button("Installieren", true) {
+                            pluginAction("install_direct", JSONObject().put("id",id).put("repo",repo))
+                        }
+                        install.maxLines = 1
+                        install.ellipsize = android.text.TextUtils.TruncateAt.END
+                        add(this, install, top = 8)
+                        val progress = ProgressBar(this@ValancedXActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
+                            max = 100
+                            visibility = View.INVISIBLE
+                            progressTintList = ColorStateList.valueOf(accentColor)
+                            indeterminateTintList = ColorStateList.valueOf(accentColor)
+                        }
+                        addView(progress, LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(3) })
+                        discoveryControls[pluginKey(id,repo)] = DiscoveryControl(install,progress)
                     }
                 }
             }
+            updateDiscoveryControls()
         }
         showEntries()
         search.addTextChangedListener(object : android.text.TextWatcher {
@@ -761,7 +866,9 @@ class ValancedXActivity : Activity() {
 
 
     private fun render(preserveScroll: Boolean = false) {
-        val previousY = if (preserveScroll) scrollView?.scrollY ?: 0 else 0
+        val previousY = if (preserveScroll) scrollView?.scrollY ?: restoredScrollY else 0
+        restoredScrollY = 0
+        discoveryControls.clear()
         val root = column().apply { setBackgroundColor(backgroundColor) }
         val header = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL

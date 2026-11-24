@@ -37,6 +37,12 @@ class SettingsProvider : ContentProvider() {
                 if (!isDiscord) throw SecurityException("Only Discord can claim plugin actions")
                 ManagerPluginMailbox.claim()
             }
+            "plugin_progress" -> {
+                if (!isDiscord) throw SecurityException("Only Discord can report plugin progress")
+                ManagerPluginMailbox.progress(extras?.getString("id").orEmpty(),
+                    extras?.getString("stage").orEmpty(), extras?.getInt("percent", -1) ?: -1)
+                Bundle.EMPTY
+            }
             "plugin_finish" -> {
                 if (!isDiscord) throw SecurityException("Only Discord can complete plugin actions")
                 ManagerPluginMailbox.finish(extras?.getString("id").orEmpty(), extras?.getString("result").orEmpty())

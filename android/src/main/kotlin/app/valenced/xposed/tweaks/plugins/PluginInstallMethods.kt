@@ -30,6 +30,7 @@ import app.valenced.xposed.tweaks.plugins.external.promptInstallPlugin
 import app.valenced.xposed.tweaks.plugins.internal.InternalPluginFlags
 import app.valenced.xposed.tweaks.plugins.repos.*
 import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.coroutineContext
 
 val pluginInstallMethods by tweak {
     pluginSystemMethod("valenced.plugins.installFile") {
@@ -218,6 +219,7 @@ val pluginInstallMethods by tweak {
                 skipped += action.id
             }
 
+            val managerProgress = coroutineContext[ManagerPluginProgress]
             val result = executeInstallPlan(
                 todo,
                 appInfo.dataDir,
@@ -228,6 +230,9 @@ val pluginInstallMethods by tweak {
                             || id in pluginRegistry.pendingUpdates
                 },
                 onProgress = { p ->
+                    val fraction = if (p.action.size > 0) (p.received.toDouble() / p.action.size).coerceIn(0.0, 1.0) else 0.0
+                    val percent = (((p.index - 1 + fraction) / p.count) * 90).toInt().coerceIn(0, 90)
+                    managerProgress?.report?.invoke(if (percent >= 90) "Prüfen und installieren" else "Download", percent)
                     emitPluginEvent(
                         PluginEvents.DOWNLOAD_PROGRESS,
                         mapOf(
@@ -243,6 +248,7 @@ val pluginInstallMethods by tweak {
                 },
             )
 
+            managerProgress?.report?.invoke("Plugins registrieren", 95)
             for (factory in result.fresh) {
                 pluginRegistry.add(factory)
                 // Default state for fresh installs.
