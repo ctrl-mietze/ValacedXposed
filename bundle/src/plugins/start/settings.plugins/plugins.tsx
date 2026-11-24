@@ -17,6 +17,7 @@ import {
 } from '@valenced/plugins/_'
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { useLayoutEffect } from 'react'
+import { View, Pressable, Text } from 'react-native'
 import { Setting } from '../settings/constants'
 // Alert implementations depend on Discord's design barrel, which is not
 // necessarily initialized at startup. Load each UI module only when needed.
@@ -51,7 +52,13 @@ export function ensurePluginSettingsRoute(plugin: import('@valenced/plugins/_').
                 navigation.setOptions({title: plugin.manifest.name})
             }, [])
 
-            return <Component api={api} />
+            return <View style={{flex:1}}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Back to plugins"
+                    onPress={() => navigation.goBack()} style={{padding:12}}>
+                    <Text style={{color:'#c9b3ff',fontWeight:'600'}}>‹ Back to plugins</Text>
+                </Pressable>
+                <View style={{flex:1}}><Component api={api}/></View>
+            </View>
         }
 
         const removeRoute = registerSettingsItem(plugin.manifest.id, {

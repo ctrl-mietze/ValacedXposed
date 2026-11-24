@@ -4,7 +4,7 @@ import {
 } from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { RootNavigationRef } from '@valenced/discord/modules/main_tabs_v2'
-import { Component as ReactComponent } from 'react'
+import { Component as ReactComponent, useState, useRef } from 'react'
 import { Modal, View, Text as NativeText, Pressable } from 'react-native'
 import type { ReactNode } from 'react'
 import type { PluginApi } from '@valenced/plugins/types'
@@ -106,13 +106,24 @@ class SettingsErrorBoundary extends ReactComponent<{ children: ReactNode }, { er
 }
 function PluginSettingsOverlay({plugin}: {plugin: AnyPlugin}) {
     const Screen = plugin.SettingsComponent
-    const close = () => AlertActionCreators.dismissAlert(SettingsOverlayKey)
+    const [visible, setVisible] = useState(true)
+    const closing = useRef(false)
+    const close = () => {
+        if (closing.current) return
+        closing.current = true
+        // Close the native modal independently of Discord's alert store.
+        setVisible(false)
+        setTimeout(() => {
+            try { AlertActionCreators.dismissAlert(SettingsOverlayKey) } catch {}
+        }, 350)
+    }
+    if (!visible) return null
     return (
-        <Modal visible animationType="slide" onRequestClose={close}>
+        <Modal visible={visible} animationType="slide" onRequestClose={close}>
             <View style={{flex:1,backgroundColor:'#10111a'}}>
                 <View style={{padding:16,paddingTop:28,flexDirection:'row',alignItems:'center'}}>
                     <NativeText style={{color:'#f1eaff',fontWeight:'700',fontSize:19,flex:1}}>{plugin.manifest.name}</NativeText>
-                    <Pressable accessibilityRole="button" onPress={close} style={{padding:12}}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Close plugin settings" onPress={close} style={{padding:12}}>
                         <NativeText style={{color:'#c9b3ff',fontWeight:'600'}}>Close</NativeText>
                     </Pressable>
                 </View>
