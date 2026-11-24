@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.32 — Audio routes & artwork
+
+- Stereo Call 1.2: real Discord Boolean communication lifecycle hook, LE route reconciliation, Java voice playback/input preferences and verified route counters. Failed split probes return to LE/system.
+- BitChord Presence 1.2: MediaItem ID, description artwork URI and safe public YouTube thumbnail fallback. Uses the actual Android asset utility and REST facade, retries failed covers, checks track identity before publishing artwork.
+- Both first-party packages retain older archives and their settings. No source or theme changes.
+
 ## 1.0.31 — BitChord Presence connection
 
 - Automatically uses the logged-in Discord client and its existing activity dispatcher; no separate credential setup.

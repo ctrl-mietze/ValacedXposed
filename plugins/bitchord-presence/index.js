@@ -4,7 +4,7 @@
   let live=false,timer=null,store=null,busy=false,epoch=0,lastKey="",lastStart=0,hasActivity=false;
   let config={publish:true,cover:true,timestamps:true,album:true,link:true,showPaused:false};
   let view={status:"Nicht gestartet",playing:false};const watchers=new Set(),artCache=new Map();
-  let revision=0,lastSentAt=0,lastAccount=null,lastReport="",lastActivity=null;
+  let revision=0,lastSentAt=0,lastAccount=null,lastReport="",lastActivity=null,lastCoverAttempt=0;
   let connection={discord:"waiting",media:"idle",publication:"idle",cover:"idle"};
   function report(){
     const summary=JSON.stringify(connection);
@@ -33,18 +33,45 @@
   }
   function update(data){view=data;for(const f of watchers)f(++revision)}
   function text(v,n=128){return typeof v==="string"?v.replace(/[\x00-\x1f\x7f]/g," ").trim().slice(0,n):""}
+  // RN's URLSearchParams implementation may lack keys()/iteration.
+  // Parse the small supported public URL surface without that dependency.
   function artUrl(v){
-    try{const u=new URL(v);if(u.protocol!=="https:"||u.username||u.password||u.port||u.hash||u.href.length>1800)return "";
-      if([...u.searchParams.keys()].some(k=>!["sqp","rs","sz","w","h"].includes(k)))return "";
-      const host=u.hostname;return /^(?:[a-z0-9-]+\.)*(?:ytimg\.com|googleusercontent\.com|ggpht\.com|sndcdn\.com)$/.test(host)?u.href:""
-    }catch{return ""}
+    if(typeof v!=="string"||v.length>1800)return "";
+    const match=v.match(/^https:\/\/([a-z0-9.-]+)(\/[^\s?#\\\\]*)(?:\?([^\s#]*))?$/i);
+    if(!match)return "";
+    const host=match[1].toLowerCase(),path=match[2],query=match[3]||"";
+    if(!/^(?:[a-z0-9-]+\.)*(?:ytimg\.com|googleusercontent\.com|ggpht\.com|sndcdn\.com)$/.test(host))return "";
+    if(/%(?:00|0a|0d|2f|5c)/i.test(path)||path.includes(".."))return "";
+    if(query&&!query.split("&").every(part=>/^(?:sqp|rs|sz|w|h|width|height|quality|format)=[A-Za-z0-9_%.,=+~:-]{1,500}$/.test(part)))return "";
+    return "https://"+host+path+(query?"?"+query:"")
   }
-  function trackUrl(v){
-    try{const u=new URL(v);if(u.protocol!=="https:"||u.username||u.password||u.port)return "";
-      if(["music.youtube.com","www.youtube.com","youtube.com"].includes(u.hostname)&&u.pathname==="/watch"&&/^[\w-]{11}$/.test(u.searchParams.get("v")||""))return "https://music.youtube.com/watch?v="+u.searchParams.get("v");
-      if(u.hostname==="youtu.be"&&/^\/[\w-]{11}$/.test(u.pathname))return "https://music.youtube.com/watch?v="+u.pathname.slice(1);
-      if(u.hostname==="soundcloud.com"&&/^\/[\w-]+\/[\w-]+\/?$/.test(u.pathname))return "https://soundcloud.com"+u.pathname;
-    }catch{}return ""
+  function youtubeId(m){
+    const uri=typeof m.mediaUri==="string"?m.mediaUri:"";
+    const link=uri.match(/^https:\/\/(?:music\.youtube\.com|www\.youtube\.com|youtube\.com)\/watch\?(?:[^#\s]*&)?v=([A-Za-z0-9_-]{11})(?:&|#|$)/)||
+      uri.match(/^https:\/\/youtu\.be\/([A-Za-z0-9_-]{11})(?:[?#]|$)/);
+    if(link)return link[1];
+    // BitChord's current MediaItem ID is used only for a recognized public
+    // YouTube ID, not a file URI, session credential or SoundCloud identifier.
+    if(/soundcloud|^file:|^content:/i.test(uri))return "";
+    const id=typeof m.mediaId==="string"?m.mediaId:"";
+    return (id.match(/^(?:(?:youtube|yt|ytmusic):)?([A-Za-z0-9_-]{11})$/i)||[])[1]||""
+  }
+  function trackUrl(m){
+    const id=youtubeId(m);
+    if(id)return "https://music.youtube.com/watch?v="+id;
+    const v=typeof m.mediaUri==="string"?m.mediaUri:"";
+    const match=v.match(/^https:\/\/soundcloud\.com\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/?(?:\?[^#]*)?$/);
+    return match?v.split("?")[0]:""
+  }
+  function artwork(m){
+    const urls=[m.art,...(Array.isArray(m.artCandidates)?m.artCandidates.slice(0,4):[])].map(artUrl).filter(Boolean);
+    const id=youtubeId(m);
+    if(id)urls.push("https://i.ytimg.com/vi/"+id+"/hqdefault.jpg");
+    return [...new Set(urls)].slice(0,4)
+  }
+  function assetId(v){
+    if(typeof v!=="string"||v.length>1000)return "";
+    return /^(?:mp:[A-Za-z0-9_./%~+=:-]+|[0-9]{16,22}|[a-f0-9]{32})$/i.test(v)?v:""
   }
   function dispatch(activity){
     const d=dispatcher();if(!d)throw Error("dispatcher-unavailable");
@@ -54,32 +81,52 @@
   }
   function clear(){
     if(hasActivity)try{dispatch(null)}catch{}
-    lastKey="";lastStart=0;lastSentAt=0;
+    lastKey="";lastStart=0;lastSentAt=0;lastCoverAttempt=0;
   }
   async function resolveCover(url){
     if(!url)return "";
     if(artCache.has(url))return artCache.get(url);
+    const f=valenced.modules.finders;
+    function utility(candidate,method){
+      if(typeof candidate?.[method]==="function")return candidate;
+      return typeof candidate?.default?.[method]==="function"?candidate.default:null
+    }
+    let assets;
     try{
-      const f=valenced.modules.finders;
-      const [assets]=f.lookupModule(f.filters.withProps("getAssetIds","fetchAssetIds"));
-      if(typeof assets?.fetchAssetIds==="function"){
-        try{
-          const result=await assets.fetchAssetIds(CLIENT_ID,[url]);
-          if(Array.isArray(result)&&typeof result[0]==="string"&&result[0].length>0&&result[0].length<=1000){
-            if(artCache.size>=24)artCache.clear();artCache.set(url,result[0]);return result[0];
-          }
-        }catch{}
+      const [m]=valenced.discord.utils.modules.finders.lookupModuleWithImportedPath("utils/ApplicationAssetUtils.tsx");
+      assets=utility(m,"fetchAssetIds")
+    }catch{}
+    if(!assets)try{
+      const [m]=f.lookupModule(f.filters.withProps("getAssetIds","fetchAssetIds"),{returnNamespace:true});
+      assets=utility(m,"fetchAssetIds")
+    }catch{}
+    let result="";
+    if(assets)try{
+      const ids=await assets.fetchAssetIds(CLIENT_ID,[url]);
+      result=assetId(Array.isArray(ids)?ids[0]:"");
+    }catch{}
+    if(!result)try{
+      // The installed Android REST facade exports getAPIBaseURL/get/post.
+      const [candidate]=f.lookupModule(f.filters.withProps("getAPIBaseURL","get","post"),{returnNamespace:true});
+      const rest=utility(candidate,"post");
+      if(rest){
+        const r=await rest.post({url:"/applications/"+CLIENT_ID+"/external-assets",body:{urls:[url]},oldFormErrors:true,rejectWithError:false});
+        const item=Array.isArray(r?.body)?r.body[0]:undefined;
+        if(r?.ok!==false&&typeof item?.external_asset_path==="string")result=assetId("mp:"+item.external_asset_path)
       }
-      const [rest]=f.lookupModule(f.filters.withProps("get","post","put","patch","delete"));
-      if(!rest||typeof rest.post!=="function")return "";
-      // Same client-side external asset resolver used by Discord's activity API.
-      // Only the selected public image URL is sent; no credentials are read.
-      const r=await rest.post({url:"/applications/"+CLIENT_ID+"/external-assets",body:{urls:[url]},oldFormErrors:true,rejectWithError:false});
-      const a=Array.isArray(r?.body)?r.body[0]:undefined;
-      if(r?.ok===false||!a||typeof a.external_asset_path!=="string"||a.external_asset_path.length>1000)return "";
-      const result="mp:"+a.external_asset_path;
-      if(artCache.size>=24)artCache.clear();artCache.set(url,result);return result
-    }catch{return ""}
+    }catch{}
+    if(result){if(artCache.size>=24)artCache.clear();artCache.set(url,result)}
+    return result
+  }
+  async function resolveArtwork(urls){
+    for(const url of urls){
+      let timeout;
+      try{
+        const id=await Promise.race([resolveCover(url),new Promise(resolve=>{timeout=setTimeout(()=>resolve(""),4000)})]);
+        if(id)return {id,url}
+      }finally{if(timeout)clearTimeout(timeout)}
+    }
+    return {id:"",url:""}
   }
   async function poll(){
     if(!live||busy)return;busy=true;const generation=epoch;
@@ -109,7 +156,7 @@
       try{m=typeof raw==="string"?JSON.parse(raw):raw||{}}catch{
         clear();stage({media:"bridge-error",publication:"idle"});return
       }
-      const title=text(m.title),artist=text(m.artist),album=text(m.album),cover=artUrl(m.art),link=trackUrl(m.mediaUri);
+      const title=text(m.title),artist=text(m.artist),album=text(m.album),covers=artwork(m),cover=covers[0]||"",link=trackUrl(m);
       const playing=m.status==="connected"&&m.playing===true&&!!title;
       const paused=m.status==="connected"&&!playing&&!!title&&(m.playbackState===2||m.playbackState===undefined);
       const media=m.status==="connected"?(playing?"playing":paused?"paused":"idle"):
@@ -124,13 +171,14 @@
       update({status:playing?"BitChord verbunden · Wiedergabe":paused?"BitChord verbunden · pausiert":"BitChord: "+media,playing,title,artist,album,cover,position,duration});
       if(!playing&&!(paused&&config.showPaused)){clear();stage({publication:"idle",cover:"idle"});return}
       const started=stamp-position;
-      const key=JSON.stringify([title,artist,album,cover,link,playing,config]);
+      const key=JSON.stringify([title,artist,album,covers,link,playing,config]);
       const confirmed=observed();
       const now=Date.now();
       // Do not flood the dispatcher if Discord is offline or suppresses
       // activity sharing. Reconcile at most once per 30 seconds.
       if(key===lastKey&&(!config.timestamps||!playing||Math.abs(started-lastStart)<8000)&&
-        (confirmed!==false||now-lastSentAt<30000)){
+        (confirmed!==false||now-lastSentAt<30000)&&
+        (!config.cover||!covers.length||connection.cover==="resolved"||now-lastCoverAttempt<60000)){
         stage({publication:confirmed===true?"observed":"submitted"});
         update({...view,status:confirmed===true?"Discord-Aktivität erkannt":"Aktivität an Discord übergeben"});return
       }
@@ -141,23 +189,29 @@
       if(playing&&config.album&&album)activity.state=text((artist?artist+" · ":"")+album);
       if(playing&&config.timestamps){activity.timestamps={start:Math.max(0,Math.round(started))};if(duration>0&&duration>=position)activity.timestamps.end=Math.round(started+duration)}
       if(config.link&&link){activity.buttons=["Song öffnen"];activity.metadata={button_urls:[link]}}
-      if(config.cover&&cover&&artCache.has(cover)){
-        image=artCache.get(cover);activity.assets={large_image:image,large_text:text(album||title)}
+      const cachedCover=covers.find(url=>artCache.has(url));
+      if(config.cover&&cachedCover){
+        image=artCache.get(cachedCover);activity.assets={large_image:image,large_text:text(album||title)}
       }
       await Promise.resolve(dispatch(activity));
       if(!live||generation!==epoch||!config.publish)return;
       lastKey=key;lastStart=started;lastSentAt=Date.now();
       stage({publication:observed()===true?"observed":"submitted",cover:image?"resolved":config.cover&&cover?"pending":"idle"});
       update({...view,status:"Aktivität an Discord übergeben"});
-      if(config.cover&&cover&&!image){
-        // Timeout only affects artwork; title and artist remain published.
-        const lookup=resolveCover(cover);
-        let timeout;
-        try{image=await Promise.race([lookup,new Promise(resolve=>{timeout=setTimeout(()=>resolve(""),8000)})])}
-        finally{if(timeout)clearTimeout(timeout)}
+      if(config.cover&&covers.length&&!image){
+        lastCoverAttempt=Date.now();
+        const found=await resolveArtwork(covers);
         if(!live||generation!==epoch||!config.publish)return;
-        if(image){
-          await Promise.resolve(dispatch({...activity,assets:{large_image:image,large_text:text(album||title)}}));
+        // Never attach an older song's cover after a track change/pause.
+        let latest;
+        try{const raw=await native.callNativeMethod("vexcord.bitchord.session",[]);latest=typeof raw==="string"?JSON.parse(raw):raw}catch{}
+        if(!live||generation!==epoch||!config.publish)return;
+        if(!latest||latest.status!=="connected"||text(latest.title)!==title||
+            text(latest.artist)!==artist||text(latest.album)!==album||
+            JSON.stringify(artwork(latest))!==JSON.stringify(covers)||
+            (latest.playing===true)!==playing){lastKey="";return}
+        if(found.id){
+          await Promise.resolve(dispatch({...activity,assets:{large_image:found.id,large_text:text(album||title)}}));
           stage({cover:"resolved",publication:observed()===true?"observed":"submitted"})
         }else stage({cover:"unavailable"});
       }

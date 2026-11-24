@@ -46,6 +46,10 @@ internal object StereoCallController {
     private var manager:AudioManager?=null
     private var leDeviceId=0
     private var routeNote="idle"
+    private var discordCallHook=false
+    private var callGeneration=0
+    private var splitStartedAt=0L
+    private val main=Handler(Looper.getMainLooper())
     private var deferredSco: (() -> Unit)?=null
 
     private fun active():Boolean = runCatching {
@@ -80,6 +84,8 @@ internal object StereoCallController {
         if(Build.VERSION.SDK_INT<31)return false
         val target=leDevice(a)?:return false
         if(a.communicationDevice?.id==target.id){
+            selectedLe=true;leDeviceId=target.id
+            leRequestedAt=SystemClock.elapsedRealtime()
             routeNote="le-selected";return true
         }
         if(selectedLe&&leDeviceId==target.id&&SystemClock.elapsedRealtime()-leRequestedAt<8000L)return true
@@ -91,6 +97,8 @@ internal object StereoCallController {
         return accepted
     }
     private fun restore(reason:String){
+        StereoVoiceTracks.restore()
+        splitStartedAt=0L
         val a=manager
         val mode=suppressedMode
         val le=selectedLe
@@ -106,6 +114,9 @@ internal object StereoCallController {
         }}.onFailure{routeNote="restore-failed"}
     }
     private fun endCall(a:AudioManager){
+        callGeneration++
+        StereoVoiceTracks.restore()
+        splitStartedAt=0L
         if(selectedLe&&Build.VERSION.SDK_INT>=31)runCatching{bypass{
             if(a.communicationDevice?.id==leDeviceId)a.clearCommunicationDevice()
         }}
@@ -115,9 +126,26 @@ internal object StereoCallController {
     private fun reconcile(a:AudioManager){
         if(!requestedCall)return
         if(!ordinary(a)){
+            StereoVoiceTracks.restore()
+            splitStartedAt=0L
             suppressedMode=false;selectedLe=false;deferredSco=null;fallbackForCall=true;routeNote="system-call-priority";return
         }
-        if((suppressedMode||selectedLe)&&path(a)==StereoRoutePolicy.Path.SYSTEM)restore("system-fallback")
+        if((suppressedMode||selectedLe)&&(!active()||(!fallbackForCall&&path(a)==StereoRoutePolicy.Path.SYSTEM)||
+            (selectedLe&&leDevice(a)==null)))restore("system-fallback")
+        if(suppressedMode&&splitStartedAt>0L&&SystemClock.elapsedRealtime()-splitStartedAt>=6000L){
+            val track=StereoVoiceTracks.status()
+            val output=(track["javaOutputVerified"] as? Int)?:0
+            val input=(track["javaInputVerified"] as? Int)?:0
+            if(output>0&&input>0)routeNote="a2dp-track-verified"
+            else{
+                restore("split-not-verified")
+                // Prefer a real LE communication device as the fallback,
+                // rather than asserting that the split mode is working.
+                if(active()&&preference==StereoRoutePolicy.Preference.A2DP&&leDevice(a)!=null){
+                    if(requestLe(a))routeNote="split-le-fallback"
+                }
+            }
+        }
         if(selectedLe&&currentType(a)==AudioDeviceInfo.TYPE_BLE_HEADSET){
             routeNote="le-selected"
         }else if(selectedLe&&SystemClock.elapsedRealtime()-leRequestedAt>=8000L){
@@ -141,10 +169,10 @@ internal object StereoCallController {
                 "a2dp" to (AudioDeviceInfo.TYPE_BLUETOOTH_A2DP in types),"leAudio" to (leDevice(a)!=null),
                 "communicationType" to currentType(a),"mode" to a.mode,"preference" to preference.name,
                 "policy" to path(a).name,"suppressedMode" to suppressedMode,"hookHits" to hits.get(),
-                "note" to routeNote)
+                "note" to routeNote,"discordCallHook" to discordCallHook)+StereoVoiceTracks.status()
         }.getOrElse{mapOf("backend" to installed,"note" to "unavailable")}
     }
-    fun install(context:Context){
+    fun install(context:Context,classLoader:ClassLoader){
         synchronized(lock){
             if(app!=null)return
             app=context.applicationContext?:context
@@ -176,7 +204,9 @@ internal object StereoCallController {
                 if(path(a)==StereoRoutePolicy.Path.A2DP_PHONE_MIC){
                     // Replace Discord's request, not global audio service state.
                     param.args[0]=AudioManager.MODE_NORMAL
-                    suppressedMode=true;hits.incrementAndGet();routeNote="a2dp-mode-request"
+                    suppressedMode=true
+                    if(splitStartedAt==0L)splitStartedAt=SystemClock.elapsedRealtime()
+                    hits.incrementAndGet();routeNote="a2dp-mode-request"
                 }
             }
             fun bluetoothRequest(param:XC_MethodHook.MethodHookParam,a:AudioManager,booleanResult:Boolean){
@@ -230,6 +260,68 @@ internal object StereoCallController {
                     }
                 }
             }
+            // Verified in the current Discord APK: setCommunicationModeOn(boolean).
+            // Observe call lifecycle at the actual host entrypoint; let the
+            // original method run, and keep route selection in AudioManager.
+            discordCallHook=runCatching{
+                val cls=classLoader.loadClass("com.discord.audio.AudioManagerModule")
+                val method=cls.getDeclaredMethod("setCommunicationModeOn",Boolean::class.javaPrimitiveType!!)
+                XposedBridge.hookMethod(method,object:XC_MethodHook(){
+                    override fun beforeHookedMethod(param:MethodHookParam){
+                        synchronized(lock){
+                            val a=audio()?:return
+                            val on=param.args.firstOrNull() as? Boolean?:return
+                            if(on&&active()&&ordinary(a)){
+                                if(!requestedCall){fallbackForCall=false;callGeneration++}
+                                requestedCall=true
+                                manager=a
+                            }
+                        }
+                    }
+                    override fun afterHookedMethod(param:MethodHookParam){
+                        if(param.hasThrowable())return
+                        synchronized(lock){
+                            val a=audio()?:return
+                            val on=param.args.firstOrNull() as? Boolean?:return
+                            if(!on){endCall(a);return}
+                            if(!requestedCall||!active())return
+                            val generation=callGeneration
+                            // Audio mode and device changes can be asynchronous.
+                            // Only retry in the same call, and only if Bluetooth
+                            // is already selected or the LE request was pending.
+                            for(delay in listOf(350L,1500L)){
+                                main.postDelayed({
+                                    synchronized(lock){
+                                        runCatching{
+                                            if(generation!=callGeneration||!requestedCall||!active()||!ordinary(a))return@runCatching
+                                            val type=currentType(a)
+                                            if(path(a)==StereoRoutePolicy.Path.LE_COMMUNICATION&&
+                                                (selectedLe||type==AudioDeviceInfo.TYPE_BLUETOOTH_SCO||type==AudioDeviceInfo.TYPE_BLE_HEADSET))
+                                                requestLe(a)
+                                        }
+                                    }
+                                },delay)
+                            }
+                        }
+                    }
+                })
+                installed++
+                true
+            }.getOrDefault(false)
+            // Java voice streams have explicit preferred devices. This is an
+            // additional backend, not a claim to patch OpenSL ES in C++.
+            installed+=StereoVoiceTracks.install{
+                synchronized(lock){
+                    val a=audio()
+                    if(a==null||!requestedCall||!suppressedMode||path(a)!=StereoRoutePolicy.Path.A2DP_PHONE_MIC)
+                        Pair(null,null)
+                    else{
+                        val out=a.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull{it.type==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP}
+                        val input=a.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull{it.type==AudioDeviceInfo.TYPE_BUILTIN_MIC}
+                        Pair(out,input)
+                    }
+                }
+            }
             runCatching{
                 audio()?.registerAudioDeviceCallback(object:AudioDeviceCallback(){
                     override fun onAudioDevicesRemoved(removedDevices:Array<out AudioDeviceInfo>){
@@ -237,7 +329,7 @@ internal object StereoCallController {
                     }
                 },Handler(Looper.getMainLooper()))
             }
-            Log.i(TAG,"Native AudioManager hooks installed: "+installed+"; mode="+modeHook)
+            Log.i(TAG,"Native audio hooks installed: "+installed+"; mode="+modeHook+"; discord="+discordCallHook)
         }
     }
 }

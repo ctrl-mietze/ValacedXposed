@@ -58,7 +58,7 @@ val additionalBridgeMethods by tweak {
 
     withAppContext { ctx ->
         val managerUri=Uri.parse("content://"+BuildConfig.APPLICATION_ID+".settings")
-        StereoCallController.install(ctx)
+        StereoCallController.install(ctx,classLoader)
         registerNativeMethod("vexcord.audio.route") {
             StereoCallStatus.get(ctx) + StereoCallController.status()
         }

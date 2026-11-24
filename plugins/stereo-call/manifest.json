@@ -2,10 +2,10 @@
   "format": 1,
   "id": "vexcord.stereo-call",
   "name": "Stereo Call",
-  "description": "Native Discord-only AudioManager hooks. LE Audio selection or classic A2DP priority with reversible system routing. Vexcord 1.0.30+.",
+  "description": "Native Discord call lifecycle and Bluetooth routing with verified Java playback/microphone preferences, LE fallback and diagnostics. Vexcord 1.0.32+.",
   "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
   "icon": "voice_bar_bluetooth",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "dependencies": {
     "valenced.api": {
       "version": ">=1 <2"

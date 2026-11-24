@@ -5,11 +5,11 @@
   "plugins": {
     "vexcord.bitchord-presence": {
       "name": "BitChord Presence",
-      "description": "Automatic BitChord listening activity using the current Discord session, live connection diagnostics, cover and optional paused activity. Vexcord 1.0.31+.",
+      "description": "Automatic BitChord listening activity, public cover URI and track ID fallbacks, authenticated Discord asset lookup and playback diagnostics. Vexcord 1.0.32+.",
       "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
       "icon": "MusicNoteIcon",
       "channels": {
-        "latest": "1.1.0"
+        "latest": "1.2.0"
       },
       "versions": {
         "1.0.0": {
@@ -37,16 +37,29 @@
               "version": "*"
             }
           }
+        },
+        "1.2.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.bitchord-presence@1.2.0.zip",
+          "sha256": "3b52dfdb66a3f742ff14d55b5aab39959dbcac9332cf249e4db3995c2d416046",
+          "size": 6902,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
         }
       }
     },
     "vexcord.stereo-call": {
       "name": "Stereo Call",
-      "description": "Native Discord-only AudioManager hooks. LE Audio selection or classic A2DP priority with reversible system routing. Vexcord 1.0.30+.",
+      "description": "Native Discord call lifecycle and Bluetooth routing with verified Java playback/microphone preferences, LE fallback and diagnostics. Vexcord 1.0.32+.",
       "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
       "icon": "voice_bar_bluetooth",
       "channels": {
-        "latest": "1.1.0"
+        "latest": "1.2.0"
       },
       "versions": {
         "1.0.0": {
@@ -66,6 +79,19 @@
           "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.stereo-call@1.1.0.zip",
           "sha256": "ea9bedd26786a4319a1b40cba3db706458b02a3e7939045a668890bee835f853",
           "size": 2274,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.2.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.stereo-call@1.2.0.zip",
+          "sha256": "d048d7a36a9e8198888722cd75b2792db73ddb5a0681d2f6591098d2d37a636c",
+          "size": 2496,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"

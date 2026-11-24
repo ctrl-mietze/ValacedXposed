@@ -242,6 +242,7 @@ internal object ManagerPluginWorker {
                 .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: "")
                 .put("compilerRuntime", CompilerRuntimeState.snapshot(id))
                 .put("presenceRuntime",if(id=="vexcord.bitchord-presence")BitChordPresenceStatus.snapshot() else null)
+                .put("audioRuntime",if(id=="vexcord.stereo-call"&&enabled)JSONObject(app.valenced.xposed.tweaks.bridge.StereoCallController.status()) else null)
                 .put("artifactSha256",SourcesStore[id]?.hash ?: "")
                 .put("repo", SourcesStore[id]?.repo ?: ""))
         }

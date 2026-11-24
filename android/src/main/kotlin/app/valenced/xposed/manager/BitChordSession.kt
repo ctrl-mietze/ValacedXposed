@@ -93,15 +93,21 @@ internal object BitChordSession {
             val title=text(MediaMetadata.METADATA_KEY_TITLE,128).ifBlank{text(MediaMetadata.METADATA_KEY_DISPLAY_TITLE,128)}
             val artist=text(MediaMetadata.METADATA_KEY_ARTIST,128).ifBlank{text(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE,128)}
             val album=text(MediaMetadata.METADATA_KEY_ALBUM,128)
-            val art=listOf(MediaMetadata.METADATA_KEY_ART_URI,MediaMetadata.METADATA_KEY_ALBUM_ART_URI,MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
-                .map{ text(it,1800) }.firstOrNull{it.startsWith("https://")}.orEmpty()
+            val description=m.description
+            val candidates=(listOf(MediaMetadata.METADATA_KEY_ART_URI,MediaMetadata.METADATA_KEY_ALBUM_ART_URI,MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+                .map{ text(it,1800) }+listOf(description.iconUri?.toString().orEmpty().take(1800)))
+                .filter{it.startsWith("https://")}.distinct().take(4)
+            val art=candidates.firstOrNull().orEmpty()
+            val mediaId=text(MediaMetadata.METADATA_KEY_MEDIA_ID,160).ifBlank{description.mediaId.orEmpty().take(160)}
+            val mediaUri=text(MediaMetadata.METADATA_KEY_MEDIA_URI,1000).ifBlank{description.mediaUri?.toString().orEmpty().take(1000)}
             val playing=state.state==PlaybackState.STATE_PLAYING
             val duration=m.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceIn(0,24*60*60*1000L)
             val advance=if(playing&&state.lastPositionUpdateTime>0L)
                 ((SystemClock.elapsedRealtime()-state.lastPositionUpdateTime).coerceAtLeast(0)*state.playbackSpeed).toLong() else 0L
             val position=(state.position.coerceAtLeast(0L)+advance).coerceIn(0L,if(duration>0)duration else 24*60*60*1000L)
             snapshot=JSONObject().put("status","connected").put("playing",playing).put("playbackState",state.state).put("title",title).put("artist",artist)
-                .put("album",album).put("art",art).put("mediaUri",text(MediaMetadata.METADATA_KEY_MEDIA_URI,1000))
+                .put("album",album).put("art",art).put("artCandidates",org.json.JSONArray(candidates))
+                .put("mediaId",mediaId).put("mediaUri",mediaUri)
                 .put("duration",duration).put("position",position).put("sampleTime",System.currentTimeMillis()).toString()
         }catch(_:Exception){disconnect("unavailable")}
     }

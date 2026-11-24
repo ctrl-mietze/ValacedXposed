@@ -1607,6 +1607,15 @@ class ValancedXActivity : Activity() {
                 append("\nAutor: ").append(item.optString("author"))
                 if(item.optString("repo").isNotBlank())append("\nQuelle: ").append(item.optString("repo"))
                 if(runtime!=null)append("\n\n").append(runtimeLabel(item)).append("\n").append(runtime.optJSONArray("bound")?.toString().orEmpty())
+                item.optJSONObject("audioRuntime")?.let{audio->
+                    append("\n\nNative Audio-Diagnose")
+                    append("\nHooks: ").append(audio.optInt("backend"))
+                    append("\nDiscord Call-Hook: ").append(if(audio.optBoolean("discordCallHook"))"gebunden" else "nicht gebunden")
+                    append("\nModus: ").append(audio.optInt("mode",-1)).append(" · Kommunikationsgerät: ").append(audio.optInt("communicationType",-1))
+                    append("\nRoute: ").append(audio.optString("note"))
+                    append("\nJava-Ausgang: ").append(audio.optInt("javaOutputVerified")).append("/").append(audio.optInt("javaOutputRequests"))
+                    append("\nJava-Mikrofon: ").append(audio.optInt("javaInputVerified")).append("/").append(audio.optInt("javaInputRequests"))
+                }
                 item.optJSONObject("presenceRuntime")?.let{presence->
                     append("\n\nBitChord-Verbindungsdiagnose")
                     for((title,key) in listOf("Discord" to "discord","Mediendienst" to "media","Aktivität" to "publication","Cover" to "cover")){
