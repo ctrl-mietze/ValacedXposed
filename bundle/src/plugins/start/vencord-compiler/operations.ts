@@ -2,6 +2,7 @@
 export type Program = {op:'moment.rounding';rounding:'floor'|'ceil'|'round'|'trunc';desktopStop:string}
     | {op:'text.codeblockIndent';tabWidth:number;render:boolean;send:boolean;edit:boolean}
     | MessageProgram
+    | import("./context-operations").ContextProgram
 
 export function removeIndent(value:string,tabWidth:number):string{
     if(value.length>100_000||!Number.isInteger(tabWidth)||tabWidth<1||tabWidth>8)return value

@@ -10,7 +10,7 @@ Revision: ce9355e9a93e369c7295fa162ad563f7f97b1ff7
 - codeFiles: 308
 - parseErrors: 0
 - bytes: 1461719
-- modes: {"compiled":5,"bundled":5,"repository":24,"manual":133}
+- modes: {"compiled":8,"bundled":5,"repository":24,"manual":130}
 - features: {"Auth-API":10,"CSS":49,"Commands":5,"ContextMenu":22,"DOM/Browser":32,"Desktop-Native":13,"Dynamischer Code":1,"Flux":42,"JSX/React":85,"MessageEvents":6,"Modulsuche":39,"Nachrichtenaktionen":3,"Netzwerk":26,"Node/Electron":7,"Settings":99,"UI-Hooks":51,"Vencord-API":119,"Webpack":115,"Webpack-Patches":129}
 
 ## Plugin-Matrix
@@ -44,9 +44,9 @@ Revision: ce9355e9a93e369c7295fa162ad563f7f97b1ff7
 | ColorSighted | 1 | 2 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele |
 | ConsoleJanitor | 2 | 11 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
 | ConsoleShortcuts | 2 | 1 | manual · Desktop-Native/Node/Electron benötigt Android-Adapter · DOM/CSS muss in React Native nachgebaut werden · Webpack-Patchanker sind keine Metro-Hook-Ziele |
-| CopyEmojiMarkdown | 2 | 0 | manual · Vencord-APIs: Settings |
+| CopyEmojiMarkdown | 2 | 0 | compiled · veyra.vencord.generated.copyemojimarkdown |
 | CopyFileContents | 3 | 1 | manual · DOM/CSS muss in React Native nachgebaut werden · Webpack-Patchanker sind keine Metro-Hook-Ziele |
-| CopyUserURLs | 1 | 0 | manual · Vencord-APIs: ContextMenu |
+| CopyUserURLs | 1 | 0 | compiled · veyra.vencord.generated.copyuserurls |
 | CrashHandler | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Notifications, Settings, index |
 | CustomCommands | 5 | 0 | manual · DOM/CSS muss in React Native nachgebaut werden · Vencord-APIs: Commands, Settings |
 | CustomIdle | 2 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Notices, Settings |
@@ -105,7 +105,7 @@ Revision: ce9355e9a93e369c7295fa162ad563f7f97b1ff7
 | NoOnboardingDelay | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele |
 | NoPendingCount | 1 | 4 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
 | NoProfileThemes | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele |
-| NoReplyMention | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
+| NoReplyMention | 1 | 1 | compiled · veyra.vencord.generated.noreplymention |
 | NoServerEmojis | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
 | NoSystemBadge | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele |
 | NoTypingAnimation | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele |

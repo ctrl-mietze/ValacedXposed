@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Only compiler diagnostics; never messages, account data, or hook arguments. */
 internal object CompilerRuntimeState {
-    private val labels=setOf("Moment","ChatRows","sendMessage","editMessage","ChatInputRightActions")
+    private val labels=setOf("Moment","ChatRows","sendMessage","editMessage","ChatInputRightActions","ActionSheet.openLazy","UserProfileMenu","EmojiMenu","ReplyCreate","ReplyEvent")
     private val known by lazy {VencordTranslator.rules.values.filter{it.kind=="compiled"}.map{it.port}.toSet()}
     private val states=ConcurrentHashMap<String,String>()
     fun report(id:String,payload:String){

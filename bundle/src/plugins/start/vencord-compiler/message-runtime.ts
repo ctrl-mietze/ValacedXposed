@@ -3,9 +3,8 @@ import { View, Text, TextInput, Pressable, Switch, ScrollView } from 'react-nati
 import { getJsonStorage, pluginStoragePathFor, type JsonStorage } from '@valenced/json-storage'
 import { getModuleWithImportedPath, lookupModuleWithImportedPath } from '@valenced/discord/utils/modules/finders'
 import { Clipboard } from '@valenced/externals/react-native-clipboard'
-import { after, before } from '@valenced/patcher'
-import { getModules } from '@valenced/modules/finders'
-import { withName } from '@valenced/modules/finders/filters'
+import { after } from '@valenced/patcher'
+import { observeMessageActions, bindMessageText } from './message-adapter'
 import { onFluxEventDispatched } from '@valenced/discord/flux'
 import type { PluginOptions } from '@valenced/plugins/types'
 import { publishCompilerState } from './runtime-status'
@@ -116,36 +115,30 @@ export function createMessageOptions(program:MessageProgram):PluginOptions{
             const publish=()=>{if(alive)publishCompilerState(plugin.manifest.id,expected,[...bound])}
             const mark=(name:string)=>{bound.add(name);publish()}
             publish()
+            cleanup(()=>{alive=false;arm(false);binding='Stopped';publishCompilerState(plugin.manifest.id,[],[],'stopped')})
             storage=getJsonStorage<State>(pluginStoragePathFor(plugin.manifest.id,'compiler-settings.json'),{default:defaults(program)})
             await storage.get()
+            if(!alive)return
             silentArmed=false;binding='Waiting for Messages'
-            cleanup(()=>{alive=false;arm(false);binding='Stopped';publishCompilerState(plugin.manifest.id,[],[],'stopped')})
-            cleanup(getModules(withName<any>('Messages'),namespace=>{
+            cleanup(observeMessageActions(target=>{
                 if(!alive||bound.has('sendMessage'))return
-                const target=(namespace as any)?.default??namespace
-                if(typeof target?.sendMessage!=='function'){binding='Messages.sendMessage unavailable';emit();return}
                 try{
-                    cleanup(before(target,'sendMessage',(args:any[])=>{
-                        try{
-                            const state=getState()
-                            const content=args[1]
-                            if(typeof content!=='string')return args
-                            let result=content
-                            if(program.op==='message.replace'&&state.enabled)
-                                result=applyReplacementRules(content,state.rules,String(args[0]??''),program.skipChannel,program.maxRules)
-                            else if(program.op==='message.timestamp'&&state.enabled)result=convertTimeShortcuts(content)
-                            else if(program.op==='message.silent'&&silentArmed){
-                                result=silentPrefix(content,program.prefix)
-                                if(content.trim()&&state.autoDisable)arm(false)
-                            }
-                            if(result===content)return args
-                            const next=args.slice();next[1]=result;return next
-                        }catch{return args}
+                    cleanup(bindMessageText(target,'sendMessage',(args,content)=>{
+                        const state=getState()
+                        if(program.op==='message.replace'&&state.enabled)
+                            return applyReplacementRules(content,state.rules,String(args[0]??''),program.skipChannel,program.maxRules)
+                        if(program.op==='message.timestamp'&&state.enabled)return convertTimeShortcuts(content)
+                        if(program.op==='message.silent'&&silentArmed){
+                            const result=silentPrefix(content,program.prefix)
+                            if(content.trim()&&state.autoDisable)arm(false)
+                            return result
+                        }
+                        return content
                     }))
                     binding='Messages.sendMessage bound';mark('sendMessage');emit()
                     nativeLoggingHook('[ValancedX Compiler] '+program.op+' bound sendMessage',1)
                 }catch(e){binding='Hook failed';emit();plugin.reportError(e)}
-            },{max:1,cached:false,returnNamespace:true}))
+            }))
             if(program.op==='message.silent'){
                 cleanup(onFluxEventDispatched('CHANNEL_SELECT' as any,payload=>{if(!getState().persist)arm(false);return payload}))
                 cleanup(getModuleWithImportedPath<any>(CHAT_ACTIONS,module=>{

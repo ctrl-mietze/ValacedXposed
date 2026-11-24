@@ -1,0 +1,17 @@
+{
+    "id": "veyra.vencord.generated.copyemojimarkdown",
+    "name": "Vencord · CopyEmojiMarkdown",
+    "description": "Allows you to copy emojis as formatted string (<:blobcatcozy:1026533070955872337>) (generated mobile adapter)",
+    "author": {
+        "name": "Veyra · Vencord contributors",
+        "links": [
+            {
+                "url": "https://github.com/Vendicated/Vencord/tree/ce9355e9a93e369c7295fa162ad563f7f97b1ff7/src/plugins/copyEmojiMarkdown",
+                "title": "Original source and license"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {}
+}

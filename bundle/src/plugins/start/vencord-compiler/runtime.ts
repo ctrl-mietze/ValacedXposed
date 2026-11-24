@@ -1,8 +1,10 @@
 import { getModules } from '@valenced/modules/finders'
-import { withName, withProps } from '@valenced/modules/finders/filters'
+import { withProps } from '@valenced/modules/finders/filters'
 import { before } from '@valenced/patcher'
 import type { PluginOptions } from '@valenced/plugins/types'
 import { createMessageOptions } from './message-runtime'
+import { createContextOptions } from './context-runtime'
+import { observeMessageActions, bindMessageText } from './message-adapter'
 import { publishCompilerState } from './runtime-status'
 import { normalizeCodeFences, normalizeRenderedRows, type Program } from './operations'
 
@@ -10,6 +12,7 @@ import { normalizeCodeFences, normalizeRenderedRows, type Program } from './oper
  * No Vencord source eval, desktop patches, arbitrary native calls or new imports. */
 export function createCompiledOptions(program:Program):PluginOptions{
     if(program.op==='message.replace'||program.op==='message.timestamp'||program.op==='message.silent')return createMessageOptions(program)
+    if(program.op==='menu.userUrl'||program.op==='menu.emojiMarkdown'||program.op==='reply.mentionPolicy')return createContextOptions(program)
     return {
         start({cleanup,plugin}){
             const expected=new Set<string>()
@@ -56,23 +59,16 @@ export function createCompiledOptions(program:Program):PluginOptions{
                 if(program.send||program.edit){
                     const targets=[...(program.send?[['sendMessage',1] as const]:[]),...(program.edit?[['editMessage',2] as const]:[])]
                     for(const [key] of targets)expected.add(key)
-                    cleanup(getModules(withName<any>('Messages'),namespace=>{
+                    cleanup(observeMessageActions(target=>{
                         if(!alive)return
-                        const target=(namespace as any)?.default??namespace
-                        for(const [key,index] of targets){
-                            if(bound.has(key)||typeof target?.[key]!=='function')continue
+                        for(const [key] of targets){
+                            if(bound.has(key)||typeof target[key]!=='function')continue
                             try{
-                                cleanup(before(target,key,(args:any[])=>{
-                                    const text=args[index]
-                                    if(typeof text!=='string')return args
-                                    const changed=normalizeCodeFences(text,tabWidth)
-                                    if(text===changed)return args
-                                    const next=args.slice();next[index]=changed;return next
-                                }))
+                                cleanup(bindMessageText(target,key,(_args,text)=>normalizeCodeFences(text,tabWidth)))
                                 mark(key)
                             }catch(e){fail(e)}
                         }
-                    },{max:1,cached:false,returnNamespace:true}))
+                    }))
                 }
             }else throw new Error('Unknown compiler operation')
             // A lazy Metro module may load later. Report pending targets without

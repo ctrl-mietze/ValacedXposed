@@ -200,6 +200,79 @@ function messageTransform(entry){
    return {op:'message.silent',prefix,autoDisableDefault:auto,persistDefault:persist};
  }
 }
+
+/** Lower desktop context actions and reply defaults to mobile menu and
+ * Flux IR. Match source AST structure and literal templates, not plugin names. */
+function contextTransform(entry){
+ const {sf,o}=entry, menus=value(o,'contextMenus');
+ const text=n=>n?.getText(sf)??'';
+ if(menus&&ts.isObjectLiteralExpression(menus)){
+  const user=prop(menus,'user-context');
+  const emoji=prop(menus,'expression-picker');
+  const declarations=new Map();
+  for(const n of sf.statements)if(ts.isVariableStatement(n))for(const d of n.declarationList.declarations)
+    if(ts.isIdentifier(d.name))declarations.set(d.name.text,d.initializer);
+  const labelFrom=node=>{
+   let label;
+   if(node)walk(node,n=>{
+    if(ts.isJsxAttribute(n)&&n.name.getText(sf)==='label'){
+     const literal=string(n.initializer);if(literal&&literal.length<=80)label=literal;
+    }
+   });
+   return label;
+  };
+  if(user&&user.initializer&&ts.isIdentifier(user.initializer)){
+   const callback=declarations.get(user.initializer.text);
+   let template;
+   if(callback)walk(callback,n=>{
+    if(ts.isCallExpression(n)&&n.expression.getText(sf)==='copyToClipboard'&&n.arguments.length===1){
+     const a=n.arguments[0];
+     if(ts.isTemplateExpression(a)&&a.head.text==='<https://discord.com/users/'&&a.templateSpans.length===1&&
+       a.templateSpans[0].expression.getText(sf)==='user.id'&&a.templateSpans[0].literal.text==='>')template='https://discord.com/users/';
+    }
+   });
+   const label=labelFrom(callback);
+   if(template&&label)return {op:'menu.userUrl',template,label};
+  }
+  if(emoji&&ts.isMethodDeclaration(emoji)){
+   const helper=sf.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='getEmojiMarkdown');
+   let customTemplate=false,copyCall=false;
+   if(helper)walk(helper,n=>{
+    if(ts.isTemplateExpression(n)&&n.head.text==='<'&&n.templateSpans.length===3&&n.templateSpans[2].literal.text==='>'&&
+       n.templateSpans[2].expression.getText(sf)==='emojiId'&&text(n.templateSpans[1].expression).includes('emojiName.replace'))customTemplate=true;
+   });
+   walk(emoji,n=>{if(ts.isCallExpression(n)&&n.expression.getText(sf)==='copyWithToast'&&text(n.arguments[0]).startsWith('getEmojiMarkdown('))copyCall=true;});
+   const label=labelFrom(emoji);
+   if(customTemplate&&copyCall&&label&&text(emoji).includes('target.dataset.type')&&text(emoji).includes('target.dataset.id'))
+    return {op:'menu.emojiMarkdown',label,copyUnicodeDefault:true};
+  }
+ }
+ const policy=prop(o,'shouldMention'),patches=value(o,'patches');
+ if(policy&&ts.isMethodDeclaration(policy)&&patches&&ts.isArrayLiteralExpression(patches)){
+   let target=false,hasReturn=false;
+   for(const patch of patches.elements)if(ts.isObjectLiteralExpression(patch)){
+     const find=string(value(patch,'find'));
+     const replacement=value(patch,'replacement');
+     if(find==='source:"message-actions"'&&replacement&&ts.isObjectLiteralExpression(replacement)&&
+       text(value(replacement,'replace')).includes('$self.shouldMention'))target=true;
+   }
+   walk(policy,n=>{if(ts.isReturnStatement(n)&&text(n).includes('settings.store.inverseShiftReply')&&text(n).includes('isHoldingShift')&&text(n).includes('isExempt'))hasReturn=true});
+   const body=text(policy);
+   if(target&&hasReturn&&body.includes('settings.store.userList')&&body.includes('GuildMemberStore.getMember')&&body.includes('settings.store.roleList')&&body.includes('settings.store.shouldPingListed')){
+     // Extract the SELECT default from the settings declaration.
+     let pingListedDefault;
+     walk(sf,n=>{
+       if(ts.isPropertyAssignment(n)&&key(n)==='shouldPingListed'&&ts.isObjectLiteralExpression(n.initializer)){
+         const options=value(n.initializer,'options');
+         if(options&&ts.isArrayLiteralExpression(options))for(const opt of options.elements)if(ts.isObjectLiteralExpression(opt)&&value(opt,'default')?.kind===ts.SyntaxKind.TrueKeyword){
+           const v=value(opt,'value');if(v?.kind===ts.SyntaxKind.TrueKeyword||v?.kind===ts.SyntaxKind.FalseKeyword)pingListedDefault=v.kind===ts.SyntaxKind.TrueKeyword;
+         }
+       }
+     });
+     if(pingListedDefault!==undefined)return {op:'reply.mentionPolicy',pingListedDefault};
+   }
+ }
+}
 const existing={
  silentTyping:['veyra.port.no-typing','Flux: lokale Tippanzeige','Keine Desktop-Schaltfläche.'],
  characterCounter:['veyra.port.char-counter','Metro ChatInputCharCounter + React Native','Mobile Darstellung; Neustart eventuell nötig.'],
@@ -238,7 +311,7 @@ for(const [id,list] of groups){
  const row={id,name:entry.name,description:entry.description,path:entry.f,sha256:fileInfo.get(entry.f).sha256,size:fileInfo.get(entry.f).size,
    files:list.length,sourceFiles:info.files,treeHash:info.treeHash,native:info.features.includes('Node/Electron')||info.features.includes('Desktop-Native')||list.some(f=>f.endsWith('/native.ts')),
    css:info.features.includes('CSS'),patches:info.patchCount>0,analysis:{...info,files:undefined}};
- const program=lifecycleSetter(entry)??codeblockTransform(entry)??messageTransform(entry);
+ const program=lifecycleSetter(entry)??codeblockTransform(entry)??messageTransform(entry)??contextTransform(entry);
  let rule;
  if(program){
   const target=writeGenerated(entry,program);
@@ -247,7 +320,10 @@ for(const [id,list] of groups){
    'text.codeblockIndent':['AST-Texttransformation → mobile Chat-Render- und Send/Edit-Hooks.','Codeblöcke statt Desktop-Renderer; mobile Hook-Ziele werden zur Laufzeit geprüft.'],
    'message.replace':['AST-Regelengine → Mobile Message-Send-Hook und lokaler RN-Regeleditor.','Textregeln plus begrenzte Regex ohne Gruppen/Quantifizierer; keine Desktop-Regelimporte.'],
    'message.timestamp':['AST-Zeitparser → Mobile Send-Hook und lokaler Zeitstempel-Generator.','Uhrzeit-Shortcuts und Kopieren im Plugin-Menü; kein Desktop-Datumsdialog.'],
-   'message.silent':['AST-Send-Listener → Mobile Send-Hook, Chat-Aktionsbutton und Einstellungen.','Manuell aktivierter Modus; kein automatisches Senden. Mobile Modulbindung erforderlich.']
+   'message.silent':['AST-Send-Listener → Mobile Send-Hook, Chat-Aktionsbutton und Einstellungen.','Manuell aktivierter Modus; kein automatisches Senden. Mobile Modulbindung erforderlich.'],
+   'menu.userUrl':['AST-Clipboard-Aktion → mobile Profil-ActionSheet-Zeile.','Nur ausgewählte Profile; tatsächlicher Menü-Render wird separat bestätigt.'],
+   'menu.emojiMarkdown':['AST-Emoji-Template → mobile Emoji-ActionSheet-Zeile.','Custom-Emojis mit ID und Name; kein DOM- oder Unicode-Picker-Ersatz.'],
+   'reply.mentionPolicy':['AST-Reply-Regel → CREATE_PENDING_REPLY und lokale Nutzer-/Rollenlisten.','Nur Standardverhalten beim Erstellen einer Antwort; kein Desktop-Shift-Modus.']
   };
   const [adaptation,limitation]=descriptions[program.op];
   rule={id,port:target,kind:'compiled',adaptation,limitation,program};

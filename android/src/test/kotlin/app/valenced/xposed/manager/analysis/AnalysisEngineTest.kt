@@ -35,6 +35,21 @@ class AnalysisEngineTest {
         ZipOutputStream(bytes).use{z->z.putNextEntry(ZipEntry("../outside.js"));z.write("x".toByteArray());z.closeEntry()}
         assertFails{AnalysisEngine.unpack(bytes.toByteArray())}
     }
+    @Test fun compilerRuntimeStatusSeparatesRegistrationAndRender(){
+        val id=VencordTranslator.rules.getValue("copyUserURLs").port
+        val state=app.valenced.xposed.tweaks.plugins.CompilerRuntimeState
+        state.report(id,JSONObject().put("expected",org.json.JSONArray(listOf("ActionSheet.openLazy","UserProfileMenu")))
+            .put("bound",org.json.JSONArray(listOf("ActionSheet.openLazy"))).put("state","running").toString())
+        assertEquals("partial",state.snapshot(id)?.optString("status"))
+        state.report(id,JSONObject().put("expected",org.json.JSONArray(listOf("ActionSheet.openLazy","UserProfileMenu")))
+            .put("bound",org.json.JSONArray(listOf("ActionSheet.openLazy","UserProfileMenu"))).put("state","running").toString())
+        assertEquals("bound",state.snapshot(id)?.optString("status"))
+        state.report(id,JSONObject().put("expected",org.json.JSONArray(listOf("ActionSheet.openLazy")))
+            .put("bound",org.json.JSONArray(listOf("untrusted"))).put("state","running").toString())
+        assertEquals("bound",state.snapshot(id)?.optString("status"))
+        state.report(id,JSONObject().put("expected",org.json.JSONArray()).put("bound",org.json.JSONArray()).put("state","stopped").toString())
+        assertEquals("stopped",state.snapshot(id)?.optString("status"))
+    }
     @Test fun ruleRequiresPinnedSource(){
         val r=VencordTranslator.rules.getValue("silentTyping")
         assertTrue(VencordTranslator.plan("silentTyping",r.sourceHash).getBoolean("supported"))
@@ -42,7 +57,7 @@ class AnalysisEngineTest {
         assertFalse(VencordTranslator.plan("unknown","wrong").getBoolean("supported"))
         assertFalse(VencordTranslator.plan("silentTyping",r.sourceHash,"wrong").getBoolean("supported"))
         assertTrue(VencordTranslator.plan("silentTyping",r.sourceHash,r.treeHash).getBoolean("supported"))
-        assertEquals(5,VencordTranslator.rules.values.count{it.kind=="compiled"})
+        assertEquals(8,VencordTranslator.rules.values.count{it.kind=="compiled"})
         assertEquals(5,VencordTranslator.rules.values.count{it.kind=="bundled"})
         assertEquals(24,VencordTranslator.rules.values.count{it.kind=="repository"})
         assertTrue(VencordTranslator.rules.values.filter{it.kind=="repository"}.all{it.artifactHash.matches(Regex("[a-f0-9]{64}"))})
