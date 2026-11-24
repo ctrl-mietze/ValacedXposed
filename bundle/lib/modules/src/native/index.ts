@@ -138,6 +138,11 @@ export function registerJSMethod(name: string, method: AnyFunction) {
     ExposedJSMethods[name] = _wrapJSMethod(method)
 }
 
+/** Fixed-purpose theme wake-up: its result has a separate request ID. */
+export function registerManagerThemeWake(method: () => void) {
+    ExposedJSMethods['valancedx.manager.themeWake'] = method
+}
+
 function _wrapJSMethod(method: AnyFunction) {
     return (...args: any[]) => {
         try {

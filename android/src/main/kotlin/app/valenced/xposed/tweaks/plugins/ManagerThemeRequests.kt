@@ -7,7 +7,9 @@ import app.valenced.xposed.ETagFetchResult
 import app.valenced.xposed.PluginHttps
 import app.valenced.plugins.repos.sha256Hex
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import app.valenced.xposed.tweaks.bridge.ValencedBridgeRegistry
+import android.util.Log
 import org.json.JSONObject
 import java.io.File
 import java.net.URI
@@ -18,22 +20,42 @@ internal object ManagerThemeRequests {
     private data class Request(val id:String,val operation:String,val data:String,
         val response:CompletableDeferred<String>,var claimed:Boolean=false)
     private var pending:Request?=null
+    @Volatile private var ready=false
+    fun markReady() {
+        ready=true
+        Log.i("ValancedXTheme","JS dispatcher ready")
+    }
     @Synchronized fun claim():String? {
         val r=pending ?: return null
         if(r.claimed)return null
         r.claimed=true
+        Log.d("ValancedXTheme","Claim "+r.operation)
         return JSONObject().put("id",r.id).put("operation",r.operation).put("data",r.data).toString()
     }
     @Synchronized fun finish(id:String,result:String) {
         val r=pending ?: return
-        if(r.id==id && r.claimed)r.response.complete(if(result.length<=220_000) result else
-            JSONObject().put("error","Theme-Katalog zu groß.").toString())
+        if(r.id==id && r.claimed) {
+            val safe=if(result.length<=220_000)result else JSONObject().put("error","Theme-Katalog zu groß.").toString()
+            Log.i("ValancedXTheme","Finish "+r.operation+" ("+safe.length+" chars)")
+            r.response.complete(safe)
+        }
     }
     suspend fun request(operation:String,data:JSONObject):JSONObject {
         val request=Request(UUID.randomUUID().toString(),operation,data.toString(),CompletableDeferred())
         synchronized(this) { check(pending==null){"Theme-Aktion läuft bereits."};pending=request }
-        try{return JSONObject(withTimeout(18_000L){request.response.await()})}
-        finally{synchronized(this){if(pending===request)pending=null}}
+        try {
+            check(ready && ValencedBridgeRegistry.isReady) {
+                "Discord-Theme-Bridge nicht gestartet. Discord öffnen und synchronisieren."
+            }
+            Log.d("ValancedXTheme","Dispatch "+operation)
+            ValencedBridgeRegistry.wakeManagerThemes()
+            val raw=withTimeoutOrNull(if(operation=="theme_snapshot")6000L else 15000L){request.response.await()}
+                ?: throw IllegalStateException(
+                    if(request.claimed) "Discord hat die Theme-Anfrage angenommen, aber nicht abgeschlossen."
+                    else "Discords JS-Runtime antwortet nicht. Discord öffnen und erneut synchronisieren.")
+            return JSONObject(raw)
+        } finally { synchronized(this){if(pending===request)pending=null} }
+
     }
 }
 

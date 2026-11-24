@@ -51,7 +51,13 @@ val pluginLoader by tweak {
     PluginStatesStore.batchSave {
         val slot = PluginStatesStore.boot
 
-        for (factory in known + external) {
+        // The combined graph is authoritative. Bundled JS bridges may depend
+        // on an installed replacement of a bundled stub.
+        val order = pluginRegistry.dependencies.loadOrder()
+        val factories = (known + external).associateBy { it.manifest.id }
+        val ids = order.ordered + factories.keys.filter { it !in order.ordered }
+        for (id in ids) {
+            val factory = factories.getValue(id)
             val manifest = factory.manifest
 
             try {

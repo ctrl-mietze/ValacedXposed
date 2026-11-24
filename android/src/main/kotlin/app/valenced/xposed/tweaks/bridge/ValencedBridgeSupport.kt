@@ -92,6 +92,17 @@ object ValencedBridgeRegistry : ValencedBridge {
         return deferred.await()
     }
 
+    /** Only for handlers explicitly registered without a FIFO acknowledgement.
+     * The theme request itself is answered through its authenticated request ID. */
+    internal fun wakeManagerThemes() {
+        val callFn=reactInstanceCallFunctionOnModule
+            ?: error("Theme-Bridge: React-Methode fehlt.")
+        val instance=reactInstance?.get()
+            ?: error("Theme-Bridge: Discord-Runtime nicht verfügbar.")
+        callFn.invoke(instance,JS_CALLABLE_MODULE_NAME,"valancedx.manager.themeWake",
+            emptyList<Any?>().toNativeObject())
+    }
+
     internal fun clearMethods() {
         methods.clear()
         asyncMethods.clear()

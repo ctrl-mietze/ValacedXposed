@@ -19,7 +19,7 @@ val additionalBridgeMethods by tweak {
         null
     }
     registerNativeMethod("valancedx.manager.themesReady") {
-        ManagerPluginWorker.markThemesReady()
+        ManagerThemeRequests.markReady()
         null
     }
     registerNativeMethod("valenced.app.reload") {

@@ -77,12 +77,11 @@ registerInternalPlugin<{ jsonStorage: Storage }>(manifest, {
             }
         })
 
-        // @as-require
-        import('./plugins')
-
+        // UI registration is independent from the actual pluginSettings API.
+        // Missing Discord design exports must not abort the essential plugin.
+        import('./plugins').catch(e => api.logger.warn('Plugin notification UI unavailable',e))
         onSettingsModulesLoaded(() => {
-            // @as-require
-            import('./register')
+            import('./register').catch(e => api.logger.warn('Plugin settings UI unavailable',e))
         })
 
         const settings = await api.jsonStorage.get()

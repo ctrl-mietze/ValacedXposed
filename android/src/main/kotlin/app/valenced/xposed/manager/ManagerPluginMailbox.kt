@@ -80,8 +80,9 @@ internal object ManagerPluginMailbox {
     @Synchronized fun result(id: String): String? {
         val job = current ?: return JSONObject().put("error", "Aktion nicht mehr verfügbar.").toString()
         if (job.id != id) return JSONObject().put("error", "Aktion ersetzt.").toString()
-        if (job.result == null && SystemClock.elapsedRealtime() - job.created > (if (job.claimed) 120_000L else 20_000L))
-            job.result = JSONObject().put("error", "Discord antwortet nicht. Öffne Discord erneut und aktualisiere.").toString()
+        val maxWait=if(!job.claimed)12000L else if(job.operation=="theme_snapshot"||job.operation=="snapshot")18000L else 120000L
+        if (job.result == null && SystemClock.elapsedRealtime() - job.created > maxWait)
+            job.result = JSONObject().put("error", "Discord antwortet nicht auf "+job.operation+". Öffne Discord und synchronisiere erneut.").toString()
         return job.result
     }
 }

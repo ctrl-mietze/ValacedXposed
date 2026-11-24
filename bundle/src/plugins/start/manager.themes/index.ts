@@ -1,4 +1,4 @@
-import { callNativeMethodSync } from '@valenced/modules/native'
+import { callNativeMethodSync, registerManagerThemeWake } from '@valenced/modules/native'
 import { JsonStorage, pluginStoragePathFor } from '@valenced/json-storage'
 import { pList, registerInternalPlugin } from '@valenced/plugins/_'
 import { getModules } from '@valenced/modules/finders'
@@ -125,7 +125,7 @@ function previewOf(store:any,plugin:string,group:string,id:string,item:any){
         const parsed=Array.isArray(colors)?colors.map(normalizedColor):[]
         if(parsed.some(Boolean))return parsed
     }catch{}
-    const theme=group===OWN?palettes.find(p=>p[0]===id):undefined
+    const theme=plugin===ID&&group===OWN?palettes.find(p=>p[0]===id):undefined
     if(theme)return [theme[2],theme[3],theme[4],theme[5],theme[6],theme[5]]
     if(plugin===ID&&imports[id]){
         const c=imports[id]!.colors.semantic.dark
@@ -249,9 +249,12 @@ async function poll(){
         try{result=await command(request.operation,request.data)}
         catch(e){result={error:e instanceof Error?e.message:String(e)}}
         native('valancedx.manager.themeFinish',[request.id,JSON.stringify(result)])
-    }catch{}finally{polling=false}
+    }catch(e){nativeLoggingHook('[ValancedX Theme] '+String(e),2)}finally{polling=false}
 }
-setInterval(()=>{void poll()},650)
+registerManagerThemeWake(()=>{void poll()})
+try {native('valancedx.manager.themesReady',[])} catch(e) {
+    nativeLoggingHook('[ValancedX Theme] Cannot announce dispatcher: '+String(e),2)
+}
 registerInternalPlugin(manifest,{
     async start({cleanup}){
         const store=themeStore()

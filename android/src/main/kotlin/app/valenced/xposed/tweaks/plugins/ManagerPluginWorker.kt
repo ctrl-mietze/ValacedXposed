@@ -44,8 +44,6 @@ internal object ManagerPluginWorker {
     private val allow = setOf("planInstall", "install", "setEnabled", "uninstall", "installLegacy")
     private val handlers = ConcurrentHashMap<String, suspend (List<Any?>) -> Any?>()
     private val started = AtomicBoolean(false)
-    private val themesReady = AtomicBoolean(false)
-    fun markThemesReady() { themesReady.set(true) }
     private data class Preview(val token: String, val plan: Map<*, *>, val at: Long)
     private var preview: Preview? = null
 
@@ -84,7 +82,9 @@ internal object ManagerPluginWorker {
                                     handle(ctx, job.getString("operation").orEmpty(), JSONObject(job.getString("payload").orEmpty()))
                                 }
                             }
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
+                            if(e is kotlinx.coroutines.CancellationException && e !is kotlinx.coroutines.TimeoutCancellationException)throw e
+                            android.util.Log.w("ValancedX","Manager operation failed: "+job.getString("operation"),e)
                             JSONObject().put("error", (e.message ?: e.javaClass.simpleName).take(1500))
                         }
                         ctx.contentResolver.call(uri, "plugin_finish", null, Bundle().apply {
@@ -206,9 +206,10 @@ internal object ManagerPluginWorker {
                         else validateUrl(data.getString("path"))
                     data.put("path",path)
                 }
+                kotlin.coroutines.coroutineContext[ManagerPluginProgress]?.report?.invoke("Discord-Theme-Bridge", -1)
                 val result=ManagerThemeRequests.request(op,data)
                 if(result.has("error"))return result
-                return snapshot(if(op=="theme_snapshot")"" else "Theme-Einstellung gespeichert.")
+                return snapshot(if(op=="theme_snapshot")"" else if(result.optJSONObject("themeState")?.optBoolean("ready")==true) "Theme-Einstellung gespeichert." else "")
                     .put("themeState",result.getJSONObject("themeState"))
             }
             "snapshot" -> return snapshot()

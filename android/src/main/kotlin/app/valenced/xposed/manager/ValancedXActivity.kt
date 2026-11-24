@@ -670,6 +670,9 @@ class ValancedXActivity : Activity() {
             val result = runCatching { JSONObject(raw) }.getOrElse { JSONObject().put("error", "Ungültige Antwort") }
             if (result.has("error")) {
                 pluginNote = result.optString("error")
+                if(lastActionKey?.startsWith("theme_")==true) {
+                    discordThemeState=discordThemeState?.let{JSONObject(it.toString()).put("ready",false).put("message",pluginNote)}
+                }
                 pluginFailedTarget = target
                 Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_LONG).show()
             } else if (result.has("legacyPreview")) {
@@ -1195,9 +1198,9 @@ class ValancedXActivity : Activity() {
         val ready=state?.optBoolean("ready")==true
         card(parent,top=12){
             add(this,label("DISCORD THEME ENGINE",11f,accentColor,true))
-            add(this,label(if(ready)"Verbunden" else "Einrichtung",22f,whiteColor,true),top=8)
+            add(this,label(if(ready)"Verbunden" else if(pluginJob!=null)"Verbindet …" else "Nicht verbunden",22f,whiteColor,true),top=8)
             add(this,label(if(ready)"Farben, Hintergründe, Fonts und Packs werden im echten Valenced-Theme-System verwaltet."
-                else "Installiere bzw. aktualisiere die offiziellen Themes-Plugins und starte Discord anschließend neu.",12f,mutedColor),top=5)
+                else state?.optString("message")?.takeIf{it.isNotBlank()} ?: pluginNote.takeIf{it.isNotBlank()} ?: "Discord öffnen und synchronisieren. Der Engine-Status wird live geprüft.",12f,mutedColor),top=5)
             twoActions(this,operationButton("Synchronisieren","theme_snapshot"),button("Discord neu starten"){restartDiscord()})
             if(!ready)add(this,button("Discord öffnen"){openDiscord()},top=7)
             if(!ready)add(this,button("Theme Engine installieren / aktualisieren",true){

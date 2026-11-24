@@ -6,6 +6,11 @@
     "icon": "PaintPaletteIcon",
     "enabledByDefault": true,
     "dependencies": {
-        "valenced.settings.themes": {}
+        "valenced.api.themes": {
+            "optional": true
+        },
+        "valenced.settings.themes": {
+            "optional": true
+        }
     }
 }

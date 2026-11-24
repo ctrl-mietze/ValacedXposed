@@ -116,12 +116,12 @@ function showErrorAlertIfNeeded() {
 }
 
 pEmitter.on('stateUpdate', plugin => {
-    if (isPluginPendingReload(plugin)) showPendingReloadAlertIfNeeded()
+    if (isPluginPendingReload(plugin)) optionalAlert(showPendingReloadAlertIfNeeded)
 })
 
 pEmitter.on('statusUpdate', plugin => {
     if (isPluginStopped(plugin) && isPluginErrored(plugin))
-        showErrorAlertIfNeeded()
+        optionalAlert(showErrorAlertIfNeeded)
 })
 
 /// PLUGIN INSTALL FEEDBACK
@@ -165,18 +165,22 @@ pEmitter.on('install', result => {
     )
 })
 
-const CircleCheckIcon = lookupGeneratedIconComponent(
-    'CircleCheckIcon',
-    'CircleCheckIcon-secondary',
-    'CircleCheckIcon-primary',
-)
+function getCircleCheckIcon() {
+    try { return lookupGeneratedIconComponent('CircleCheckIcon','CircleCheckIcon-secondary','CircleCheckIcon-primary') }
+    catch { return undefined }
+}
 
 function showInstallToast(text: string, id: string) {
     ToastActionCreators.open(pluginInstallToastKeyFor(id), {
         text,
-        icon: CircleCheckIcon,
+        icon: getCircleCheckIcon(),
     })
 }
 
-showErrorAlertIfNeeded()
-showPendingReloadAlertIfNeeded()
+function optionalAlert(fn: () => void) {
+    try { fn() } catch(e) {
+        nativeLoggingHook('[ValancedX] Optional plugin notification unavailable: '+String(e),2)
+    }
+}
+optionalAlert(showErrorAlertIfNeeded)
+optionalAlert(showPendingReloadAlertIfNeeded)

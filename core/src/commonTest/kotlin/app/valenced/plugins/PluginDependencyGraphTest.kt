@@ -177,6 +177,20 @@ class PluginDependencyGraphTest {
     // region loadOrder
 
     @Test
+    fun `combined graph starts bundled bridge after installed theme provider`() {
+        val order = graphOf(
+            manifest("veyra.manager.themes", dependencies = arrayOf("valenced.settings.themes" to dep())),
+            manifest("valenced.settings.plugins"),
+            manifest("valenced.settings.themes", dependencies = arrayOf("valenced.api.themes" to dep(), "valenced.settings.plugins" to dep())),
+            manifest("valenced.api.themes"),
+        ).loadOrder()
+        assertTrue(order.dropped.isEmpty())
+        assertTrue(order.ordered.indexOf("valenced.api.themes") < order.ordered.indexOf("valenced.settings.themes"))
+        assertTrue(order.ordered.indexOf("valenced.settings.themes") < order.ordered.indexOf("veyra.manager.themes"))
+    }
+
+
+    @Test
     fun `dependencies are ordered before dependents`() {
         val order = graphOf(
             manifest("leaf", dependencies = arrayOf("mid" to dep())),
