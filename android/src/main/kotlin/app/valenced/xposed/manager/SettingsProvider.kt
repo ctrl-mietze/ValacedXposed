@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
 import android.os.Process
+import app.valenced.xposed.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -35,7 +36,10 @@ class SettingsProvider : ContentProvider() {
         return when (method) {
             "plugin_claim" -> {
                 if (!isDiscord) throw SecurityException("Only Discord can claim plugin actions")
-                ManagerPluginMailbox.claim()
+                if(extras?.getInt("manager_version",0)!=BuildConfig.VERSION_CODE) {
+                    ManagerPluginMailbox.outdatedWorker()
+                    Bundle.EMPTY
+                } else ManagerPluginMailbox.claim()
             }
             "plugin_progress" -> {
                 if (!isDiscord) throw SecurityException("Only Discord can report plugin progress")

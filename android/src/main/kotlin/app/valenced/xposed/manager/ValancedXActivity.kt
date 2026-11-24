@@ -37,16 +37,37 @@ import java.util.Locale
 
 /** An offline-first native manager. No Discord APK patcher or telemetry backend. */
 class ValancedXActivity : Activity() {
-    private val backgroundColor = Color.rgb(13, 14, 18)
-    private val surfaceColor = Color.rgb(23, 25, 31)
-    private val raisedColor = Color.rgb(33, 35, 44)
-    private val borderColor = Color.rgb(49, 51, 61)
-    private val accentColor = Color.rgb(190, 174, 255)
-    private val mintColor = Color.rgb(113, 230, 201)
+    private var currentTheme = VxThemes.all.first()
+    private var cardRadius = 20
+    private var glowEnabled = false
+    private var compact = false
+    private val backgroundColor get() = currentTheme.background
+    private val surfaceColor get() = currentTheme.surface
+    private val raisedColor get() = currentTheme.raised
+    private val borderColor get() = currentTheme.border
+    private val accentColor get() = currentTheme.accent
+    private val mintColor get() = currentTheme.secondary
     private val warmColor = Color.rgb(255, 203, 115)
     private val errorColor = Color.rgb(255, 143, 157)
-    private val whiteColor = Color.rgb(245, 245, 252)
-    private val mutedColor = Color.rgb(160, 163, 177)
+    private val whiteColor get() = currentTheme.text
+    private val mutedColor get() = currentTheme.muted
+
+    private fun readTheme() {
+        val base = VxThemes.get(prefs.getString("ui_theme_id","dark"))
+        val intensity = (prefs.getInt("ui_card_intensity",50).coerceIn(0,100)-50)/200f
+        fun tone(color:Int):Int = VxThemes.blend(color, if(intensity>=0) base.text else base.background, kotlin.math.abs(intensity))
+        currentTheme = base.copy(
+            background=if(prefs.getBoolean("ui_amoled_enabled",false)) Color.BLACK else base.background,
+            surface=tone(base.surface), raised=tone(base.raised),
+            accent=prefs.getInt("ui_accent_color",base.accent),
+        )
+        cardRadius=prefs.getInt("ui_card_radius",20).coerceIn(12,30)
+        glowEnabled=prefs.getBoolean("ui_glow",base.id=="glass"||base.id=="neon")
+        compact=prefs.getBoolean("ui_compact",false)
+        window.statusBarColor=backgroundColor
+        window.navigationBarColor=backgroundColor
+    }
+
     private val tabs = arrayOf("Start", "Module", "Plugins", "Diagnose", "Info")
     private var currentTab = 0
     private var scrollView: ScrollView? = null
@@ -67,10 +88,9 @@ class ValancedXActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = backgroundColor
-        window.navigationBarColor = backgroundColor
+        readTheme()
         currentTab = (savedInstanceState?.getInt("tab") ?: 0).coerceIn(0, tabs.lastIndex)
-        pluginPage = savedInstanceState?.getInt("pluginPage") ?: 0
+        pluginPage = (savedInstanceState?.getInt("pluginPage") ?: 0).coerceIn(0,3)
         pluginQuery = savedInstanceState?.getString("pluginQuery").orEmpty()
         pluginJob = savedInstanceState?.getString("pluginJob")
         pluginTarget = savedInstanceState?.getString("pluginTarget")
@@ -167,8 +187,9 @@ class ValancedXActivity : Activity() {
 
     private fun card(parent: LinearLayout, top: Int = 12, tint: Int = surfaceColor, build: LinearLayout.() -> Unit) {
         val child = column().apply {
-            setPadding(dp(16), dp(16), dp(16), dp(16))
-            background = rounded(tint, borderColor, 18)
+            val padding=dp(if(compact) 12 else 16)
+            setPadding(padding,padding,padding,padding)
+            background = rounded(tint, if(glowEnabled) VxThemes.blend(borderColor,accentColor,.32f) else borderColor, cardRadius)
         }
         child.build()
         add(parent, child, top)
@@ -192,7 +213,7 @@ class ValancedXActivity : Activity() {
             true,
         ).apply {
             gravity = Gravity.CENTER
-            setPadding(dp(12), dp(13), dp(12), dp(13))
+            setPadding(dp(12), dp(if(compact) 10 else 13), dp(12), dp(if(compact) 10 else 13))
             background = interactive(
                 if (primary) accentColor else raisedColor,
                 if (primary) accentColor else borderColor, 13,
@@ -443,7 +464,7 @@ class ValancedXActivity : Activity() {
 
     private fun about(parent: LinearLayout) {
         eyebrow(parent, "Über ValancedX")
-        card(parent, tint = Color.rgb(26, 26, 35)) {
+        card(parent, tint = surfaceColor) {
             add(this, label("ValancedX", 25f, whiteColor, true))
             add(this, label("Release " + BuildConfig.VERSION_NAME, 13f, accentColor), top = 6)
             add(
@@ -639,6 +660,15 @@ class ValancedXActivity : Activity() {
                 pluginNote = result.optString("error")
                 pluginFailedTarget = target
                 if (target != null) Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_LONG).show()
+            } else if (result.has("sourcePreview")) {
+                val source=result.getJSONObject("sourcePreview")
+                pluginNote="Index erfolgreich geprüft."
+                AlertDialog.Builder(this@ValancedXActivity)
+                    .setTitle(source.optString("name"))
+                    .setMessage(source.optString("url")+"\n\n"+source.optInt("count")+" Plugin-Einträge\n"+source.optString("description")+
+                        "\n\nDer Index ist gültig. Plugins aus Drittquellen können Code in Discord ausführen.")
+                    .setNegativeButton("Abbrechen",null)
+                    .setPositiveButton("Hinzufügen") { _,_ -> pluginAction("add_repo",JSONObject().put("url",source.optString("url"))) }.show()
             } else if (result.has("token")) {
                 val actions = result.optJSONArray("actions") ?: JSONArray()
                 if (actions.length() == 0) {
@@ -715,27 +745,248 @@ class ValancedXActivity : Activity() {
         }
         AlertDialog.Builder(this).setTitle("Neue Repository-URL").setView(input)
             .setNegativeButton("Abbrechen", null)
-            .setPositiveButton("Weiter") { _, _ -> addPluginSource(input.text.toString().trim()) }.show()
+            .setPositiveButton("Prüfen") { _, _ -> pluginAction("preview_repo",JSONObject().put("url",input.text.toString().trim())) }.show()
     }
+
+
+    private fun twoActions(parent: LinearLayout, first: View, second: View, top: Int = 10) {
+        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        row.addView(first, LinearLayout.LayoutParams(0,-2,1f))
+        row.addView(second, LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin = dp(8) })
+        add(parent,row,top=top)
+    }
+
+    private fun capsule(value: String, color: Int): TextView = label(value,11f,color,true).apply {
+        gravity = Gravity.CENTER
+        setPadding(dp(9),dp(5),dp(9),dp(5))
+        background = rounded(VxThemes.blend(surfaceColor,color,.10f),VxThemes.blend(borderColor,color,.24f),20)
+    }
+
+    private fun themeSwitch(parent: LinearLayout, title: String, subtitle: String, key: String, fallback: Boolean) {
+        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val details = column()
+        add(details,label(title,14f,whiteColor,true))
+        add(details,label(subtitle,12f,mutedColor),top=3)
+        row.addView(details,LinearLayout.LayoutParams(0,-2,1f))
+        row.addView(Switch(this).apply {
+            isChecked = prefs.getBoolean(key,fallback)
+            contentDescription = title
+            thumbTintList = ColorStateList.valueOf(if(isChecked) accentColor else mutedColor)
+            setOnCheckedChangeListener { _, enabled ->
+                prefs.edit().putBoolean(key,enabled).apply()
+                render(preserveScroll=true)
+            }
+        })
+        add(parent,row,top=5,bottom=5)
+    }
+
+    private fun themeSlider(parent: LinearLayout, title: String, key: String, min: Int, max: Int, fallback: Int, suffix: String) {
+        val current = prefs.getInt(key,fallback).coerceIn(min,max)
+        val value = label(title + " · " + current + suffix,13f,whiteColor,true)
+        add(parent,value,top=6)
+        add(parent,android.widget.SeekBar(this).apply {
+            this.max = max-min
+            progress = current-min
+            progressTintList=ColorStateList.valueOf(accentColor)
+            thumbTintList=ColorStateList.valueOf(accentColor)
+            contentDescription=title
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                    value.text=title+" · "+(progress+min)+suffix
+                }
+                override fun onStartTrackingTouch(bar: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(bar: android.widget.SeekBar?) {
+                    prefs.edit().putInt(key,(bar?.progress ?: current-min)+min).apply()
+                    render(preserveScroll=true)
+                }
+            })
+        },top=4)
+    }
+
+    private fun themeScreen(parent: LinearLayout) {
+        val selected = VxThemes.get(prefs.getString("ui_theme_id","dark"))
+        card(parent,top=12) {
+            val row=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
+            row.addView(label("DEIN LOOK",11f,mutedColor,true),LinearLayout.LayoutParams(0,-2,1f))
+            row.addView(capsule("AKTIV",mintColor))
+            add(this,row)
+            add(this,label(selected.name,25f,whiteColor,true),top=9)
+            add(this,label("Manager-Design · Änderungen sofort sichtbar",12f,mutedColor),top=4)
+            addView(VxThemePreview(this@ValancedXActivity, currentTheme,cardRadius,glowEnabled),
+                LinearLayout.LayoutParams(-1,dp(180)).apply { topMargin=dp(14) })
+        }
+        eyebrow(parent,"THEME-KOLLEKTION")
+        for (theme in VxThemes.all) {
+            card(parent,top=9) {
+                val row=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
+                val title=column()
+                add(title,label(theme.name,17f,whiteColor,true))
+                add(title,label(theme.description,11f,mutedColor),top=4)
+                row.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+                if (selected.id==theme.id) row.addView(capsule("Aktiv",mintColor))
+                add(this,row)
+                addView(VxThemePreview(this@ValancedXActivity,theme,cardRadius,theme.id=="glass"||theme.id=="neon"),
+                    LinearLayout.LayoutParams(-1,dp(145)).apply { topMargin=dp(12) })
+                if(selected.id!=theme.id) add(this,button("Anwenden",true) {
+                    prefs.edit().putString("ui_theme_id",theme.id).remove("ui_accent_color").apply()
+                    render(preserveScroll=true)
+                },top=10)
+            }
+        }
+        eyebrow(parent,"PERSONALISIERUNG")
+        card(parent,top=8) {
+            add(this,label("Akzentfarbe",15f,whiteColor,true))
+            add(this,label("Eine Farbe für Buttons, Navigation und Details.",12f,mutedColor),top=4)
+            val swatches=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
+            for ((name,color) in VxThemes.accents) {
+                val swatch=View(this@ValancedXActivity).apply {
+                    contentDescription=name
+                    background=rounded(color,if(color==accentColor) whiteColor else color,24)
+                    isFocusable=true; isClickable=true
+                    setOnClickListener { prefs.edit().putInt("ui_accent_color",color).apply(); render(preserveScroll=true) }
+                }
+                swatches.addView(swatch,LinearLayout.LayoutParams(0,dp(36),1f).apply { setMargins(dp(3),0,dp(3),0) })
+            }
+            add(this,swatches,top=12)
+            add(this,button("Preset-Akzent wiederherstellen") { prefs.edit().remove("ui_accent_color").apply(); render(preserveScroll=true) },top=10)
+            line(this)
+            themeSwitch(this,"AMOLED-Schwarz","Echter schwarzer App-Hintergrund.","ui_amoled_enabled",false)
+            themeSwitch(this,"Glow-Kanten","Subtiler Akzent an Cards und aktiven Elementen.","ui_glow",selected.id=="glass"||selected.id=="neon")
+            themeSwitch(this,"Kompakter Modus","Weniger Innenabstand, mehr sichtbare Einträge.","ui_compact",false)
+            line(this)
+            themeSlider(this,"Eckenradius","ui_card_radius",12,30,20," dp")
+            themeSlider(this,"Card-Intensität","ui_card_intensity",0,100,50,"%")
+            add(this,button("Design zurücksetzen",destructive=true) {
+                val edit=prefs.edit()
+                for (key in listOf("ui_theme_id","ui_accent_color","ui_amoled_enabled","ui_glow","ui_compact","ui_card_radius","ui_card_intensity")) edit.remove(key)
+                edit.apply()
+                render(preserveScroll=true)
+            },top=12)
+        }
+        add(parent,label("Themes ändern die Oberfläche von ValancedX, nicht das Discord-Design.",12f,mutedColor),top=12)
+    }
+
+    private fun sourceScreen(parent: LinearLayout) {
+        val repos=pluginData?.optJSONArray("repos") ?: JSONArray()
+        val items=(0 until repos.length()).mapNotNull { repos.optJSONObject(it) }
+        val urls=items.map { it.optString("url") }.toSet()
+        val active=items.count { it.optBoolean("enabled") }
+        card(parent,top=12) {
+            val header=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
+            header.addView(VxIcon(this@ValancedXActivity,"source",accentColor),LinearLayout.LayoutParams(dp(28),dp(28)).apply { rightMargin=dp(10) })
+            header.addView(label("Repository Hub",22f,whiteColor,true),LinearLayout.LayoutParams(0,-2,1f))
+            add(this,header)
+            add(this,label("Verwalte die Herkunft deiner Plugins.",13f,mutedColor),top=6)
+            val counts=LinearLayout(this@ValancedXActivity)
+            for ((number,caption) in listOf(items.size to "Quellen",active to "Aktiv",items.filter { it.optBoolean("enabled") }.sumOf { it.optInt("count") } to "Einträge")) {
+                val tile=column().apply {
+                    setPadding(dp(12),dp(10),dp(8),dp(10))
+                    background=rounded(raisedColor,borderColor,14)
+                    add(this,label(number.toString(),23f,accentColor,true))
+                    add(this,label(caption,11f,mutedColor),top=3)
+                }
+                counts.addView(tile,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),0,dp(3),0) })
+            }
+            add(this,counts,top=15)
+            twoActions(this,button("+ Quelle",true) { customPluginSource() },button("Alle aktualisieren") { pluginAction("refresh") })
+        }
+        eyebrow(parent,"DEINE QUELLEN")
+        if(items.isEmpty()) add(parent,label("Noch keine Quellen geladen. Aktualisiere die Liste.",13f,mutedColor),top=6)
+        for (item in items) {
+            val url=item.optString("url")
+            val enabled=item.optBoolean("enabled")
+            val error=item.optString("error")
+            val checked=item.optLong("checkedAt")
+            card(parent,top=9) {
+                val header=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
+                val iconBox=LinearLayout(this@ValancedXActivity).apply {
+                    gravity=Gravity.CENTER
+                    background=rounded(VxThemes.blend(raisedColor,accentColor,.10f),borderColor,14)
+                    addView(VxIcon(this@ValancedXActivity,"source",accentColor),LinearLayout.LayoutParams(dp(22),dp(22)))
+                }
+                header.addView(iconBox,LinearLayout.LayoutParams(dp(44),dp(44)).apply { rightMargin=dp(12) })
+                val title=column()
+                add(title,label(item.optString("name",url),16f,whiteColor,true))
+                add(title,label(Uri.parse(url).host ?: url,11f,mutedColor),top=3)
+                header.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+                header.addView(capsule(if(!enabled) "Aus" else if(error.isNotBlank()) "Fehler" else if(item.optBoolean("cached")) "Aktiv" else "Offen",
+                    if(!enabled) mutedColor else if(error.isNotBlank()) errorColor else if(item.optBoolean("cached")) mintColor else warmColor))
+                add(this,header)
+                if(item.optString("description").isNotBlank()) add(this,label(item.optString("description"),12f,mutedColor),top=10)
+                val info=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
+                info.addView(capsule(item.optInt("count").toString()+" Plugins",accentColor))
+                val kind=if(url=="https://community.valenced.app/index.json") "Offizieller Katalog" else "Externe Quelle"
+                info.addView(capsule(kind,mutedColor),LinearLayout.LayoutParams(-2,-2).apply { leftMargin=dp(6) })
+                add(this,info,top=12)
+                add(this,label(if(checked>0L) "Letzte Prüfung: "+time(checked) else "Letzte Prüfung: nicht erfasst",11f,mutedColor),top=10)
+                if(error.isNotBlank()) add(this,label(error,12f,errorColor),top=5)
+                twoActions(this,button("Aktualisieren") { pluginAction("refresh_repo",JSONObject().put("url",url)) },
+                    button(if(enabled) "Deaktivieren" else "Aktivieren",primary=!enabled) { pluginAction("toggle_repo",JSONObject().put("url",url)) })
+                twoActions(this,button("Details") {
+                    AlertDialog.Builder(this@ValancedXActivity).setTitle(item.optString("name",url))
+                        .setMessage(url+"\n\n"+item.optInt("count")+" Plugin-Einträge\n"+kind+
+                            "\n\nFremder Plugin-Code läuft in Discord. Ein gültiger Index ist kein Sicherheitsnachweis.")
+                        .setNeutralButton("URL kopieren") { _,_ -> (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Repository",url)) }
+                        .setPositiveButton("Schließen",null).show()
+                },button("Entfernen",destructive=true) {
+                    AlertDialog.Builder(this@ValancedXActivity).setTitle("Quelle entfernen?")
+                        .setMessage("Installierte Plugins bleiben erhalten, verlieren aber ihre Update-Quelle.")
+                        .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen") { _,_ -> pluginAction("remove_repo",JSONObject().put("url",url)) }.show()
+                },top=7)
+            }
+        }
+        eyebrow(parent,"EMPFOHLENE KATALOGE")
+        val suggested=listOf(
+            Triple("Valenced Community","https://community.valenced.app/index.json","Offizieller Plugin-Katalog"),
+            Triple("dxckie-cell","https://dxckie-cell.github.io/valenced-plugins/index.json","Optionale Community-Erweiterungen")
+        )
+        for ((name,url,description) in suggested) {
+            card(parent,top=8) {
+                add(this,label(name,17f,whiteColor,true))
+                add(this,label(description,12f,mutedColor),top=4)
+                add(this,label(Uri.parse(url).host ?: url,11f,mutedColor),top=5)
+                if(url in urls) add(this,capsule("Bereits hinzugefügt",mintColor),top=9)
+                else add(this,button("Quelle prüfen",true) { pluginAction("preview_repo",JSONObject().put("url",url)) },top=10)
+            }
+        }
+        eyebrow(parent,"LEGACY")
+        card(parent,top=8) {
+            add(this,label("Revenge Next",16f,whiteColor,true))
+            add(this,label("Archivierte Plattform. Legacy-Plugins benötigen einen kompatiblen Port; kein automatischer Import.",12f,mutedColor),top=6)
+            add(this,button("Archiv ansehen") { openWeb("https://github.com/revenge-mod/revenge-community-plugins") },top=10)
+        }
+    }
+
 
     private fun pluginScreen(parent: LinearLayout) {
         eyebrow(parent, "PLUGIN MANAGER")
         add(parent, label("Plugins", 27f, whiteColor, true), top = 4)
         add(parent, label("Installieren, verwalten und Quellen hinzufügen.", 13f, mutedColor), top = 5)
         val nav = LinearLayout(this).apply { background = rounded(surfaceColor, borderColor, 15); setPadding(dp(3),dp(3),dp(3),dp(3)) }
-        for ((i, text) in arrayOf("Installiert", "Entdecken", "Quellen").withIndex()) {
+        for ((i, text) in arrayOf("Installiert", "Entdecken", "Quellen", "Themes").withIndex()) {
             nav.addView(label(text, 12f, if (pluginPage == i) whiteColor else mutedColor, true).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(2), dp(12), dp(2), dp(12))
                 background = interactive(if (pluginPage == i) raisedColor else surfaceColor, borderColor, 12)
-                setOnClickListener { pluginPage = i; pluginQuery = ""; render() }
+                setOnClickListener {
+                    pluginPage=i;pluginQuery="";render()
+                    if(i!=3&&pluginData==null&&pluginJob==null) pluginAction("snapshot")
+                }
             }, LinearLayout.LayoutParams(0,-2,1f))
         }
         add(parent, nav, top = 15)
         discoveryControls.clear()
+        if(pluginPage==3) { themeScreen(parent); return }
         // The list stays mounted while an individual plugin is installing.
         if (pluginNote.isNotBlank() && pluginPage != 1)
             add(parent, label(pluginNote, 12f, if (pluginJob != null) accentColor else mutedColor), top = 10)
+        if (pluginPage==2) {
+            if (pluginJob!=null) {
+                add(parent,ProgressBar(this).apply { isIndeterminate=true },top=4)
+                add(parent,label("Quellen werden geprüft …",12f,accentColor),top=4)
+            }
+            sourceScreen(parent);return
+        }
         if (pluginJob != null && pluginTarget == null) {
             add(parent, ProgressBar(this).apply { isIndeterminate = true }, top = 6)
             add(parent, button("Discord öffnen") { openDiscord() }, top = 8)
@@ -753,42 +1004,6 @@ class ValancedXActivity : Activity() {
         if (pluginData == null) {
             add(parent, label("Öffne Discord einmal nach dem Update und aktualisiere dann die Liste. Der Manager nutzt die echte Plugin-Bridge.", 13f, mutedColor), top = 10)
         }
-        if (pluginPage == 2) {
-            val repos = pluginData?.optJSONArray("repos") ?: JSONArray()
-            eyebrow(parent, "Aktive & gespeicherte Quellen")
-            for (i in 0 until repos.length()) {
-                val item = repos.optJSONObject(i) ?: continue
-                val url = item.optString("url")
-                card(parent, top = 8) {
-                    add(this, label(item.optString("name"), 16f, whiteColor, true))
-                    add(this, label(url, 11f, mutedColor), top = 5)
-                    statusRow(this, "${item.optInt("count")} Plugins", if (item.optBoolean("enabled")) "Aktiv" else "Inaktiv", if (item.optBoolean("enabled")) mintColor else mutedColor)
-                    add(this, button(if (item.optBoolean("enabled")) "Deaktivieren" else "Aktivieren") { pluginAction("toggle_repo", JSONObject().put("url", url)) }, top = 5)
-                    add(this, button("Entfernen", destructive = true) {
-                        AlertDialog.Builder(this@ValancedXActivity).setTitle("Quelle entfernen?")
-                            .setMessage("Installierte Plugins bleiben erhalten, verlieren aber ihre Update-Quelle.")
-                            .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen") { _, _ -> pluginAction("remove_repo", JSONObject().put("url",url)) }.show()
-                    }, top = 6)
-                }
-            }
-            eyebrow(parent, "Empfohlene Quellen")
-            card(parent, top = 8) {
-                add(this, label("Valenced Community", 16f, whiteColor, true))
-                add(this, label("Offizieller, gepflegter Plugin-Katalog. Nachfolger von Revenge Next.", 12f, mutedColor), top = 5)
-                add(this, button("Community hinzufügen", true) { addPluginSource("https://community.valenced.app/index.json") }, top = 8)
-                line(this)
-                add(this, label("dxckie-cell", 16f, whiteColor, true))
-                add(this, label("Externer Valenced-Katalog. Freiwillige Zusatzquelle.", 12f, mutedColor), top = 5)
-                add(this, button("Zusatzquelle hinzufügen") { addPluginSource("https://dxckie-cell.github.io/valenced-plugins/index.json") }, top = 8)
-                line(this)
-                add(this, label("Revenge Next", 16f, whiteColor, true))
-                add(this, label("Archiviert. Viele Plugins wurden zu Valenced portiert. Alte Revenge-/Vendetta-Formate sind nicht automatisch kompatibel.", 12f, mutedColor), top = 5)
-                add(this, button("Revenge-Archiv ansehen") { openWeb("https://github.com/revenge-mod/revenge-community-plugins") }, top = 8)
-            }
-            add(parent, button("+ Eigene Repository-URL", true) { customPluginSource() }, top = 12)
-            return
-        }
-
         val search = EditText(this).apply {
             hint = "Plugins suchen …"
             setText(pluginQuery)
@@ -814,7 +1029,7 @@ class ValancedXActivity : Activity() {
                 val id = item.optString("id")
                 card(list, top = 8) {
                     add(this,label(item.optString("name",id),16f,whiteColor,true))
-                    add(this,label("v" + item.optString("version") + " · " + item.optString("author"),11f,accentColor),top=4)
+                    add(this,label("v" + item.optString("version") + " · " + item.optString("author").substringBefore(" <").substringBefore(" (").trim(),11f,accentColor),top=4)
                     if (item.optString("description").isNotBlank()) add(this,label(item.optString("description"),12f,mutedColor),top=6)
                     if (pluginPage == 0) {
                         val essential = item.optBoolean("essential")
@@ -869,6 +1084,7 @@ class ValancedXActivity : Activity() {
         val previousY = if (preserveScroll) scrollView?.scrollY ?: restoredScrollY else 0
         restoredScrollY = 0
         discoveryControls.clear()
+        readTheme()
         val root = column().apply { setBackgroundColor(backgroundColor) }
         val header = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -882,13 +1098,23 @@ class ValancedXActivity : Activity() {
         add(title, label("ValancedX", 23f, whiteColor, true))
         add(title, label("XPOSED  /  " + BuildConfig.VERSION_NAME, 10f, mutedColor, true), top = 3)
         header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(label("↻", 23f, accentColor, true).apply {
-            gravity = Gravity.CENTER
-            contentDescription = "Aktualisieren"
-            background = interactive(surfaceColor, borderColor, 12)
-            isFocusable = true
-            setOnClickListener { connectionGranted = grantConnection(); render(preserveScroll = true) }
-        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        fun headerIcon(name:String,description:String,action:()->Unit): View =
+            LinearLayout(this).apply {
+                gravity=Gravity.CENTER
+                background=interactive(surfaceColor,borderColor,12)
+                contentDescription=description
+                isClickable=true;isFocusable=true
+                addView(VxIcon(this@ValancedXActivity,name,accentColor),LinearLayout.LayoutParams(dp(22),dp(22)))
+                setOnClickListener { action() }
+            }
+        header.addView(headerIcon("theme","Themes") {
+            currentTab=2;pluginPage=3;render()
+        },LinearLayout.LayoutParams(dp(40),dp(42)).apply { rightMargin=dp(6) })
+        header.addView(headerIcon("refresh","Aktualisieren") {
+            connectionGranted=grantConnection()
+            if(currentTab==2&&pluginPage!=3&&pluginJob==null) pluginAction(if(pluginPage==0) "snapshot" else "refresh")
+            else render(preserveScroll=true)
+        },LinearLayout.LayoutParams(dp(40),dp(42)))
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
         val scroll = ScrollView(this).apply {
@@ -911,26 +1137,25 @@ class ValancedXActivity : Activity() {
             background = rounded(surfaceColor, borderColor, 22)
             setPadding(dp(5), dp(5), dp(5), dp(5))
         }
-        val symbols = arrayOf("⌂", "≡", "⊞", "≋", "ⓘ")
+        val symbols = arrayOf("home", "module", "plugins", "diagnose", "info")
         for (index in tabs.indices) {
             val selected = index == currentTab
             val cell = column().apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(3), dp(5), dp(3), dp(5))
                 background = interactive(if (selected) raisedColor else surfaceColor,
-                    if (selected) borderColor else surfaceColor, 16)
+                    if (selected) VxThemes.blend(borderColor,accentColor,.28f) else surfaceColor, 16)
                 isClickable = true
                 isFocusable = true
                 isSelected = selected
                 contentDescription = tabs[index]
-                add(this, label(symbols[index], 21f, if (selected) accentColor else mutedColor, true).apply {
-                    gravity = Gravity.CENTER
-                })
+                addView(VxIcon(this@ValancedXActivity,symbols[index],if(selected) accentColor else mutedColor),
+                    LinearLayout.LayoutParams(dp(24),dp(24)))
                 add(this, label(tabs[index], 11f, if (selected) whiteColor else mutedColor, selected).apply {
                     gravity = Gravity.CENTER
                 }, top = 2)
                 setOnClickListener {
-                    if (currentTab != index) { currentTab = index; render(); if (index == 2 && pluginData == null && pluginJob == null) pluginAction("snapshot") }
+                    if (currentTab != index) { currentTab = index; render(); if (index == 2 && pluginPage != 3 && pluginData == null && pluginJob == null) pluginAction("snapshot") }
                 }
             }
             navigation.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))

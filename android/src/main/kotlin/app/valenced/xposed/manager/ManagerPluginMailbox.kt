@@ -14,7 +14,7 @@ internal object ManagerPluginMailbox {
     private var current: Job? = null
     private var snapshot: String? = null
     @Synchronized fun cachedSnapshot(): String? = snapshot
-    private val allowed = setOf("snapshot", "refresh", "add_repo", "toggle_repo", "remove_repo",
+    private val allowed = setOf("snapshot", "refresh", "refresh_repo", "preview_repo", "add_repo", "toggle_repo", "remove_repo",
         "plan", "install", "install_direct", "enable", "disable", "uninstall")
     @Synchronized fun submit(operation: String, payload: JSONObject): String {
         require(operation in allowed)
@@ -24,6 +24,12 @@ internal object ManagerPluginMailbox {
             "Eine Plugin-Aktion läuft bereits."
         }
         return UUID.randomUUID().toString().also { current = Job(it, operation, payload.toString()) }
+    }
+    @Synchronized fun outdatedWorker() {
+        val job=current ?: return
+        if(!job.claimed&&job.result==null) {
+            job.result=JSONObject().put("error","Discord nutzt noch die vorige ValancedX-Version. Discord vollständig neu starten.").toString()
+        }
     }
     @Synchronized fun claim(): Bundle {
         val job = current ?: return Bundle.EMPTY

@@ -10,6 +10,11 @@ import app.valenced.plugins.repos.RepoStore
 import app.valenced.plugins.repos.SourcesStore
 import app.valenced.plugins.repos.UserRepo
 import app.valenced.xposed.BuildConfig
+import app.valenced.xposed.httpClient
+import app.valenced.xposed.getWithETag
+import app.valenced.xposed.ETagFetchResult
+import app.valenced.plugins.repos.parseRepoIndex
+import app.valenced.plugins.repos.sha256Hex
 import app.valenced.xposed.manager.HookPolicy
 import app.valenced.xposed.manager.HookMode
 import app.valenced.xposed.manager.ModuleSettings
@@ -56,7 +61,7 @@ internal object ManagerPluginWorker {
         pluginJobScope.launch {
             while (true) {
                 try {
-                    val job = ctx.contentResolver.call(uri, "plugin_claim", null, null)
+                    val job = ctx.contentResolver.call(uri, "plugin_claim", null, Bundle().apply { putInt("manager_version",BuildConfig.VERSION_CODE) })
                     val id = job?.getString("id")
                     if (id != null) {
                         val result = try {
@@ -101,6 +106,20 @@ internal object ManagerPluginWorker {
         return url
     }
 
+    private var repoMeta: android.content.SharedPreferences? = null
+
+    private suspend fun refreshTracked(url: String) {
+        try {
+            refreshRepo(url)
+            repoMeta?.edit()?.putLong(sha256Hex(url)+"_at",System.currentTimeMillis())
+                ?.remove(sha256Hex(url)+"_error")?.apply()
+        } catch (e: Exception) {
+            repoMeta?.edit()?.putLong(sha256Hex(url)+"_at",System.currentTimeMillis())
+                ?.putString(sha256Hex(url)+"_error",(e.message ?: "Indexfehler").take(300))?.apply()
+            throw e
+        }
+    }
+
     private fun snapshot(message: String = ""): JSONObject {
         val repos = JSONArray()
         val available = JSONArray()
@@ -108,7 +127,11 @@ internal object ManagerPluginWorker {
         for (repo in RepoStore.list()) {
             val index = RepoStore.cachedIndex(repo.url)
             repos.put(JSONObject().put("url", repo.url).put("enabled", repo.enabled)
-                .put("name", index?.name?.take(100) ?: repo.url).put("count", index?.plugins?.size ?: 0))
+                 .put("name", index?.name?.take(100) ?: repo.url).put("count", index?.plugins?.size ?: 0)
+                .put("description",index?.description?.take(240) ?: "")
+                .put("cached",index != null)
+                .put("checkedAt",repoMeta?.getLong(sha256Hex(repo.url)+"_at",0L) ?: 0L)
+                .put("error",repoMeta?.getString(sha256Hex(repo.url)+"_error","") ?: ""))
             if (!repo.enabled || index == null) continue
             for ((id, plugin) in index.plugins) {
                 if (available.length() >= 350) break
@@ -144,6 +167,7 @@ internal object ManagerPluginWorker {
         // Seed the same official community source once, respecting any later
         // explicit removal. Third-party sources are always opt-in.
         val defaults = context.getSharedPreferences("valancedx_manager_plugins", Context.MODE_PRIVATE)
+        repoMeta=defaults
         if (!defaults.getBoolean("seeded", false)) {
             val official = "https://community.valenced.app/index.json"
             if (RepoStore.list().none { it.url == official }) {
@@ -151,7 +175,7 @@ internal object ManagerPluginWorker {
             }
             defaults.edit().putBoolean("seeded", true).apply()
             if (RepoStore.list().any { it.url == official && it.enabled } && RepoStore.cachedIndex(official) == null) {
-                runCatching { refreshRepo(official) }
+                runCatching { refreshTracked(official) }
             }
         }
         when (op) {
@@ -159,9 +183,24 @@ internal object ManagerPluginWorker {
             "refresh" -> {
                 val errors = mutableListOf<String>()
                 for (repo in RepoStore.list().filter { it.enabled }) {
-                    runCatching { refreshRepo(repo.url) }.onFailure { errors.add(repo.url + ": " + it.message) }
+                    runCatching { refreshTracked(repo.url) }.onFailure { errors.add(repo.url + ": " + it.message) }
                 }
                 return snapshot(if (errors.isEmpty()) "Quellen aktualisiert." else errors.joinToString("\n").take(1400))
+            }
+            "refresh_repo" -> {
+                val url=data.getString("url")
+                require(RepoStore.list().any { it.url==url }) { "Unbekannte Quelle." }
+                val message=runCatching { refreshTracked(url); "Quelle aktualisiert." }.getOrElse { "Indexfehler: "+it.message }
+                return snapshot(message.take(1200))
+            }
+            "preview_repo" -> {
+                val url=validateUrl(data.getString("url"))
+                val fetched=httpClient.getWithETag(url,null,10_000L) as? ETagFetchResult.Fetched
+                    ?: error("Keine Indexdaten empfangen.")
+                require(fetched.bytes.size<=2_000_000) { "Repository-Index ist zu groß." }
+                val index=parseRepoIndex(fetched.bytes.decodeToString(),url,RepoStore.log)
+                return JSONObject().put("sourcePreview",JSONObject().put("url",url).put("name",index.name.take(100))
+                    .put("description",index.description.take(240)).put("count",index.plugins.size))
             }
             "add_repo" -> {
                 val url = validateUrl(data.getString("url"))
@@ -170,7 +209,7 @@ internal object ManagerPluginWorker {
                     require(list.size < 12) { "Maximal 12 Quellen." }
                     RepoStore.set(list + UserRepo(url))
                 }
-                val note = runCatching { refreshRepo(url); "Quelle hinzugefügt." }
+                val note = runCatching { refreshTracked(url); "Quelle hinzugefügt." }
                     .getOrElse { "Quelle gespeichert, Indexfehler: " + it.message }
                 return snapshot(note.take(1500))
             }
