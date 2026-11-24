@@ -28,6 +28,9 @@ import android.widget.Toast
 import app.valenced.xposed.BuildConfig
 import app.valenced.xposed.R
 import org.json.JSONArray
+import org.json.JSONObject
+import android.widget.EditText
+import android.widget.ProgressBar
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -44,7 +47,7 @@ class ValancedXActivity : Activity() {
     private val errorColor = Color.rgb(255, 143, 157)
     private val whiteColor = Color.rgb(245, 245, 252)
     private val mutedColor = Color.rgb(160, 163, 177)
-    private val tabs = arrayOf("Start", "Module", "Diagnose", "Info")
+    private val tabs = arrayOf("Start", "Module", "Plugins", "Diagnose", "Info")
     private var currentTab = 0
     private var scrollView: ScrollView? = null
     private var connectionGranted = false
@@ -66,7 +69,7 @@ class ValancedXActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = backgroundColor
         window.navigationBarColor = backgroundColor
-        currentTab = savedInstanceState?.getInt("tab") ?: 0
+        currentTab = (savedInstanceState?.getInt("tab") ?: 0).coerceIn(0, tabs.lastIndex)
         if (!prefs.getBoolean("welcome_seen", false)) {
             prefs.edit().putBoolean("welcome_seen", true).apply()
             showWelcome()
@@ -78,11 +81,13 @@ class ValancedXActivity : Activity() {
         connectionGranted = grantConnection()
         prefs.registerOnSharedPreferenceChangeListener(listener)
         render()
+        if (pluginJob != null) mainHandler.post(pluginPoll)
     }
 
     override fun onPause() {
         prefs.unregisterOnSharedPreferenceChangeListener(listener)
         mainHandler.removeCallbacks(refresh)
+        mainHandler.removeCallbacks(pluginPoll)
         super.onPause()
     }
 
@@ -545,6 +550,216 @@ class ValancedXActivity : Activity() {
             .show()
     }
 
+
+    private var pluginPage = 0
+    private var pluginQuery = ""
+    private var pluginData: JSONObject? = null
+    private var pluginJob: String? = null
+    private var pluginNote = ""
+    private val pluginPoll = object : Runnable {
+        override fun run() {
+            val id = pluginJob ?: return
+            val raw = ManagerPluginMailbox.result(id)
+            if (raw == null) {
+                mainHandler.postDelayed(this, 600)
+                return
+            }
+            pluginJob = null
+            val result = runCatching { JSONObject(raw) }.getOrElse { JSONObject().put("error", "Ungültige Antwort") }
+            if (result.has("error")) {
+                pluginNote = result.optString("error")
+            } else if (result.has("token")) {
+                val actions = result.optJSONArray("actions") ?: JSONArray()
+                if (actions.length() == 0) {
+                    pluginNote = "Bereits aktuell."
+                } else {
+                    val lines = (0 until actions.length()).mapNotNull { i ->
+                        actions.optJSONObject(i)?.let { it.optString("id") + "  " + it.optString("version") + "\n" + it.optString("repo") }
+                    }
+                    val warnings = result.optJSONArray("warnings") ?: JSONArray()
+                    val notes = (0 until warnings.length()).map { warnings.optString(it) }
+                    AlertDialog.Builder(this@ValancedXActivity)
+                        .setTitle("Plugins installieren?")
+                        .setMessage(lines.joinToString("\n\n") +
+                            if (notes.isEmpty()) "\n\nPlugins führen Code in Discord aus. Nur vertrauenswürdige Quellen nutzen."
+                            else "\n\n" + notes.joinToString("\n") + "\n\nNur vertrauenswürdige Quellen nutzen.")
+                        .setNegativeButton("Abbrechen", null)
+                        .setPositiveButton("Installieren") { _, _ ->
+                            pluginAction("install", JSONObject().put("token", result.optString("token")))
+                        }.show()
+                    pluginNote = "Installationsplan erstellt."
+                }
+            } else {
+                pluginData = result
+                pluginNote = result.optString("message")
+            }
+            if (currentTab == 2) render(preserveScroll = true)
+        }
+    }
+
+    private fun pluginAction(operation: String, data: JSONObject = JSONObject()) {
+        if (pluginJob != null) return
+        connectionGranted = grantConnection()
+        runCatching { ManagerPluginMailbox.submit(operation, data) }
+            .onSuccess {
+                pluginJob = it
+                pluginNote = "Discord verarbeitet die Aktion …"
+                mainHandler.removeCallbacks(pluginPoll)
+                mainHandler.post(pluginPoll)
+            }.onFailure { pluginNote = it.message.orEmpty() }
+        if (currentTab == 2) render(preserveScroll = true)
+    }
+
+    private fun addPluginSource(url: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Plugin-Quelle hinzufügen")
+            .setMessage(url + "\n\nPlugins dieser Quelle können nach deiner Bestätigung installiert werden. Fremder Code läuft innerhalb von Discord.")
+            .setNegativeButton("Abbrechen", null)
+            .setPositiveButton("Hinzufügen") { _, _ -> pluginAction("add_repo", JSONObject().put("url", url)) }
+            .show()
+    }
+
+    private fun customPluginSource() {
+        val input = EditText(this).apply {
+            hint = "https://example.org/index.json"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+        }
+        AlertDialog.Builder(this).setTitle("Neue Repository-URL").setView(input)
+            .setNegativeButton("Abbrechen", null)
+            .setPositiveButton("Weiter") { _, _ -> addPluginSource(input.text.toString().trim()) }.show()
+    }
+
+    private fun pluginScreen(parent: LinearLayout) {
+        eyebrow(parent, "PLUGIN MANAGER")
+        add(parent, label("Plugins", 27f, whiteColor, true), top = 4)
+        add(parent, label("Installieren, verwalten und Quellen hinzufügen.", 13f, mutedColor), top = 5)
+        val nav = LinearLayout(this).apply { background = rounded(surfaceColor, borderColor, 15); setPadding(dp(3),dp(3),dp(3),dp(3)) }
+        for ((i, text) in arrayOf("Installiert", "Entdecken", "Quellen").withIndex()) {
+            nav.addView(label(text, 12f, if (pluginPage == i) whiteColor else mutedColor, true).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(2), dp(12), dp(2), dp(12))
+                background = interactive(if (pluginPage == i) raisedColor else surfaceColor, borderColor, 12)
+                setOnClickListener { pluginPage = i; pluginQuery = ""; render() }
+            }, LinearLayout.LayoutParams(0,-2,1f))
+        }
+        add(parent, nav, top = 15)
+        if (pluginNote.isNotBlank()) add(parent, label(pluginNote, 12f, if (pluginJob != null) accentColor else mutedColor), top = 10)
+        if (pluginJob != null) {
+            add(parent, ProgressBar(this).apply { isIndeterminate = true }, top = 6)
+            add(parent, button("Discord öffnen") { openDiscord() }, top = 8)
+            add(parent, button("Wartende Aktion abbrechen") {
+                if (pluginJob?.let { ManagerPluginMailbox.cancel(it) } != true)
+                    Toast.makeText(this, "Aktion wird bereits ausgeführt.", Toast.LENGTH_SHORT).show()
+            }, top = 8)
+            return
+        }
+        val actions = LinearLayout(this)
+        actions.addView(button("Aktualisieren") { pluginAction(if (pluginPage == 0) "snapshot" else "refresh") }, LinearLayout.LayoutParams(0,-2,1f))
+        actions.addView(button("Discord öffnen") { openDiscord() }, LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin = dp(6) })
+        add(parent, actions, top = 10)
+        if (pluginData == null) {
+            add(parent, label("Öffne Discord einmal nach dem Update und aktualisiere dann die Liste. Der Manager nutzt die echte Plugin-Bridge.", 13f, mutedColor), top = 10)
+        }
+        if (pluginPage == 2) {
+            val repos = pluginData?.optJSONArray("repos") ?: JSONArray()
+            eyebrow(parent, "Aktive & gespeicherte Quellen")
+            for (i in 0 until repos.length()) {
+                val item = repos.optJSONObject(i) ?: continue
+                val url = item.optString("url")
+                card(parent, top = 8) {
+                    add(this, label(item.optString("name"), 16f, whiteColor, true))
+                    add(this, label(url, 11f, mutedColor), top = 5)
+                    statusRow(this, "${item.optInt("count")} Plugins", if (item.optBoolean("enabled")) "Aktiv" else "Inaktiv", if (item.optBoolean("enabled")) mintColor else mutedColor)
+                    add(this, button(if (item.optBoolean("enabled")) "Deaktivieren" else "Aktivieren") { pluginAction("toggle_repo", JSONObject().put("url", url)) }, top = 5)
+                    add(this, button("Entfernen", destructive = true) {
+                        AlertDialog.Builder(this@ValancedXActivity).setTitle("Quelle entfernen?")
+                            .setMessage("Installierte Plugins bleiben erhalten, verlieren aber ihre Update-Quelle.")
+                            .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen") { _, _ -> pluginAction("remove_repo", JSONObject().put("url",url)) }.show()
+                    }, top = 6)
+                }
+            }
+            eyebrow(parent, "Empfohlene Quellen")
+            card(parent, top = 8) {
+                add(this, label("Valenced Community", 16f, whiteColor, true))
+                add(this, label("Offizieller, gepflegter Plugin-Katalog. Nachfolger von Revenge Next.", 12f, mutedColor), top = 5)
+                add(this, button("Community hinzufügen", true) { addPluginSource("https://community.valenced.app/index.json") }, top = 8)
+                line(this)
+                add(this, label("dxckie-cell", 16f, whiteColor, true))
+                add(this, label("Externer Valenced-Katalog. Freiwillige Zusatzquelle.", 12f, mutedColor), top = 5)
+                add(this, button("Zusatzquelle hinzufügen") { addPluginSource("https://dxckie-cell.github.io/valenced-plugins/index.json") }, top = 8)
+                line(this)
+                add(this, label("Revenge Next", 16f, whiteColor, true))
+                add(this, label("Archiviert. Viele Plugins wurden zu Valenced portiert. Alte Revenge-/Vendetta-Formate sind nicht automatisch kompatibel.", 12f, mutedColor), top = 5)
+                add(this, button("Revenge-Archiv ansehen") { openWeb("https://github.com/revenge-mod/revenge-community-plugins") }, top = 8)
+            }
+            add(parent, button("+ Eigene Repository-URL", true) { customPluginSource() }, top = 12)
+            return
+        }
+
+        val entries = pluginData?.optJSONArray(if (pluginPage == 0) "installed" else "available") ?: JSONArray()
+        val search = EditText(this).apply {
+            hint = "Plugins suchen …"
+            setText(pluginQuery)
+            setTextColor(whiteColor)
+            setHintTextColor(mutedColor)
+            setSingleLine(true)
+            setPadding(dp(14),dp(10),dp(14),dp(10))
+            background = rounded(surfaceColor,borderColor,14)
+        }
+        add(parent, search, top = 12)
+        val list = column()
+        add(parent, list, top = 4)
+        fun showEntries() {
+            list.removeAllViews()
+            val filtered = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
+                .filter { item -> listOf("name","description","id","author").any { item.optString(it).contains(pluginQuery, ignoreCase = true) } }
+                .sortedBy { it.optString("name").lowercase(Locale.ROOT) }
+            eyebrow(list, "${filtered.size} Plugins")
+            if (filtered.isEmpty()) add(list,label("Keine Einträge. Quellen hinzufügen oder aktualisieren.",13f,mutedColor),top=8)
+            for (item in filtered) {
+                val id = item.optString("id")
+                card(list, top = 8) {
+                    add(this,label(item.optString("name",id),16f,whiteColor,true))
+                    add(this,label("v" + item.optString("version") + " · " + item.optString("author"),11f,accentColor),top=4)
+                    if (item.optString("description").isNotBlank()) add(this,label(item.optString("description"),12f,mutedColor),top=6)
+                    if (pluginPage == 0) {
+                        val essential = item.optBoolean("essential")
+                        val enabled = item.optBoolean("enabled")
+                        statusRow(this, if (item.optBoolean("internal")) "Integriert" else "Extern",
+                            if (item.optBoolean("failed")) "Fehler" else if (enabled) "Aktiviert" else "Deaktiviert",
+                            if (item.optBoolean("failed")) errorColor else if (enabled) mintColor else mutedColor)
+                        if (item.optString("pending").isNotBlank()) add(this,label("Update bereit – Neustart erforderlich",11f,warmColor))
+                        if (!essential) add(this,button(if (enabled) "Deaktivieren" else "Aktivieren") {
+                            pluginAction(if (enabled) "disable" else "enable",JSONObject().put("id",id))
+                        },top=6)
+                        if (!essential && !item.optBoolean("internal")) add(this,button("Deinstallieren", destructive=true) {
+                            AlertDialog.Builder(this@ValancedXActivity).setTitle("Plugin deinstallieren?")
+                                .setMessage("Auch lokale Daten dieses Plugins werden gelöscht.")
+                                .setNegativeButton("Abbrechen",null).setPositiveButton("Deinstallieren") { _, _ -> pluginAction("uninstall",JSONObject().put("id",id)) }.show()
+                        },top=6)
+                    } else {
+                        val repo = item.optString("repo")
+                        add(this,label(Uri.parse(repo).host ?: repo,11f,mutedColor),top=5)
+                        add(this,button(if (item.optBoolean("installed")) "Version prüfen" else "Installieren",true) {
+                            pluginAction("plan",JSONObject().put("id",id).put("repo",repo))
+                        },top=8)
+                    }
+                }
+            }
+        }
+        showEntries()
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                pluginQuery = s?.toString().orEmpty()
+                showEntries()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+    }
+
+
     private fun render(preserveScroll: Boolean = false) {
         val previousY = if (preserveScroll) scrollView?.scrollY ?: 0 else 0
         val root = column().apply { setBackgroundColor(backgroundColor) }
@@ -580,7 +795,8 @@ class ValancedXActivity : Activity() {
         when (currentTab) {
             0 -> dashboard(page)
             1 -> modules(page)
-            2 -> diagnostics(page)
+            2 -> pluginScreen(page)
+            3 -> diagnostics(page)
             else -> about(page)
         }
         val navigation = LinearLayout(this).apply {
@@ -588,7 +804,7 @@ class ValancedXActivity : Activity() {
             background = rounded(surfaceColor, borderColor, 22)
             setPadding(dp(5), dp(5), dp(5), dp(5))
         }
-        val symbols = arrayOf("⌂", "≡", "≋", "ⓘ")
+        val symbols = arrayOf("⌂", "≡", "⊞", "≋", "ⓘ")
         for (index in tabs.indices) {
             val selected = index == currentTab
             val cell = column().apply {
@@ -607,7 +823,7 @@ class ValancedXActivity : Activity() {
                     gravity = Gravity.CENTER
                 }, top = 2)
                 setOnClickListener {
-                    if (currentTab != index) { currentTab = index; render() }
+                    if (currentTab != index) { currentTab = index; render(); if (index == 2 && pluginData == null && pluginJob == null) pluginAction("snapshot") }
                 }
             }
             navigation.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))

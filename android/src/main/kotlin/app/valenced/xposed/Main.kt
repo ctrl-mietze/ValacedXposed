@@ -21,6 +21,7 @@ import app.valenced.xposed.tweaks.bridge.ValencedBridgeRegistry
 import app.valenced.xposed.tweaks.bridge.additionalBridgeMethods
 import app.valenced.xposed.tweaks.bridge.valencedBridgeSupport
 import app.valenced.xposed.tweaks.plugins.pluginInstallMethods
+import app.valenced.xposed.tweaks.plugins.ManagerPluginWorker
 import app.valenced.xposed.tweaks.plugins.pluginLoader
 import app.valenced.xposed.tweaks.plugins.pluginMethods
 import app.valenced.xposed.tweaks.plugins.pluginStates
@@ -135,6 +136,7 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
             withAppContext { context ->
                 ModuleSettings.report(context, "framework_attached")
                 val config = ModuleSettings.read(context)
+                ManagerPluginWorker.start(context)
                 when (HookPolicy.resolve(config.enabled, config.javascriptEnabled, config.safeMode)) {
                     HookMode.OFF -> ModuleSettings.report(context, "disabled")
                     HookMode.RECOVERY -> ModuleSettings.report(context, "safe_mode")

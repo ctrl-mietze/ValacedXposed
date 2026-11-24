@@ -33,6 +33,15 @@ class SettingsProvider : ContentProvider() {
 
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return when (method) {
+            "plugin_claim" -> {
+                if (!isDiscord) throw SecurityException("Only Discord can claim plugin actions")
+                ManagerPluginMailbox.claim()
+            }
+            "plugin_finish" -> {
+                if (!isDiscord) throw SecurityException("Only Discord can complete plugin actions")
+                ManagerPluginMailbox.finish(extras?.getString("id").orEmpty(), extras?.getString("result").orEmpty())
+                Bundle.EMPTY
+            }
             "configuration" -> Bundle().apply {
                 putBoolean("hook_enabled", prefs.getBoolean("hook_enabled", true))
                 putBoolean("javascript_enabled", prefs.getBoolean("javascript_enabled", true))

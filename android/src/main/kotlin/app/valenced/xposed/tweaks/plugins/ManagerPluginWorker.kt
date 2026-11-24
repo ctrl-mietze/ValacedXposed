@@ -1,0 +1,207 @@
+package app.valenced.xposed.tweaks.plugins
+
+import android.content.Context
+import android.net.Uri
+import android.os.Bundle
+import android.os.SystemClock
+import app.valenced.plugins.PluginStatesStore
+import app.valenced.plugins.external.requireValidPluginId
+import app.valenced.plugins.repos.RepoStore
+import app.valenced.plugins.repos.SourcesStore
+import app.valenced.plugins.repos.UserRepo
+import app.valenced.xposed.BuildConfig
+import app.valenced.xposed.manager.HookPolicy
+import app.valenced.xposed.manager.HookMode
+import app.valenced.xposed.manager.ModuleSettings
+import app.valenced.xposed.tweaks.plugins.internal.InternalPluginFlags
+import app.valenced.xposed.tweaks.plugins.repos.refreshRepo
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** Native manager uses exactly the same plugin operations as the in-Discord UI.
+ * No access to Discord messages, account data, scripts, or arbitrary bridge calls. */
+internal object ManagerPluginWorker {
+    private const val PREFIX = "valenced.plugins."
+    private val allow = setOf("planInstall", "install", "setEnabled", "uninstall")
+    private val handlers = ConcurrentHashMap<String, suspend (List<Any?>) -> Any?>()
+    private val started = AtomicBoolean(false)
+    private data class Preview(val token: String, val plan: Map<*, *>, val at: Long)
+    private var preview: Preview? = null
+
+    fun register(name: String, handler: suspend (List<Any?>) -> Any?) {
+        if (name.startsWith(PREFIX) && name.removePrefix(PREFIX) in allow) handlers[name] = handler
+    }
+
+    private suspend fun invoke(name: String, vararg args: Any?): Any? =
+        (handlers[PREFIX + name] ?: error("Plugin-Bridge noch nicht bereit."))(args.toList())
+
+    fun start(context: Context) {
+        if (!started.compareAndSet(false, true)) return
+        val ctx = context.applicationContext ?: context
+        val uri = Uri.parse("content://" + BuildConfig.APPLICATION_ID + ".settings/connection")
+        pluginJobScope.launch {
+            while (true) {
+                try {
+                    val job = ctx.contentResolver.call(uri, "plugin_claim", null, null)
+                    val id = job?.getString("id")
+                    if (id != null) {
+                        val result = try {
+                            val config = ModuleSettings.current()
+                            check(HookPolicy.resolve(config.enabled, config.javascriptEnabled, config.safeMode) == HookMode.FULL) {
+                                "ValancedX befindet sich im deaktivierten oder Recovery-Modus."
+                            }
+                            withTimeout(105_000L) {
+                                handle(ctx, job.getString("operation").orEmpty(), JSONObject(job.getString("payload").orEmpty()))
+                            }
+                        } catch (e: Exception) {
+                            JSONObject().put("error", (e.message ?: e.javaClass.simpleName).take(1500))
+                        }
+                        ctx.contentResolver.call(uri, "plugin_finish", null, Bundle().apply {
+                            putString("id", id)
+                            putString("result", result.toString())
+                        })
+                    }
+                } catch (_: Exception) {
+                    // Manager may be uninstalled or visibility not granted yet.
+                }
+                delay(2000)
+            }
+        }
+    }
+
+    private fun validateUrl(raw: String): String {
+        val url = raw.trim().trimEnd('/')
+        val parsed = java.net.URI(url)
+        require(parsed.scheme == "https" && !parsed.host.isNullOrBlank() &&
+            parsed.userInfo == null && parsed.fragment == null && url.length <= 1000) { "Nur öffentliche HTTPS-Index-URLs." }
+        return url
+    }
+
+    private fun snapshot(message: String = ""): JSONObject {
+        val repos = JSONArray()
+        val available = JSONArray()
+        val installed = JSONArray()
+        for (repo in RepoStore.list()) {
+            val index = RepoStore.cachedIndex(repo.url)
+            repos.put(JSONObject().put("url", repo.url).put("enabled", repo.enabled)
+                .put("name", index?.name?.take(100) ?: repo.url).put("count", index?.plugins?.size ?: 0))
+            if (!repo.enabled || index == null) continue
+            for ((id, plugin) in index.plugins) {
+                if (available.length() >= 350) break
+                val version = plugin.channels["latest"] ?: continue
+                available.put(JSONObject().put("id", id).put("name", plugin.name.take(100))
+                    .put("description", plugin.description.take(180)).put("author", plugin.author.take(80))
+                    .put("version", version).put("repo", repo.url)
+                    .put("installed", pluginRegistry.factories.containsKey(id)))
+            }
+        }
+        val active = PluginStatesStore.active
+        for ((id, manifest) in pluginRegistry.knownManifests().toSortedMap()) {
+            val factory = pluginRegistry.factories[id]
+            val flags = factory?.internalFlags.orEmpty()
+            val essential = InternalPluginFlags.ESSENTIAL in flags
+            val enabled = essential || active.isPluginEnabled(id) ||
+                (!active.hasPlugin(id) && InternalPluginFlags.ENABLED_BY_DEFAULT in flags)
+            installed.put(JSONObject().put("id", id).put("name", manifest.name.take(100))
+                .put("description", manifest.description.take(180)).put("author", manifest.author.take(80))
+                .put("version", manifest.version.toString())
+                .put("essential", essential).put("internal", InternalPluginFlags.INTERNAL in flags)
+                .put("enabled", enabled).put("failed", id in pluginRegistry.discoveryFailures || id in pluginRegistry.bootErrors)
+                .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: "")
+                .put("repo", SourcesStore[id]?.repo ?: ""))
+        }
+        return JSONObject().put("message", message).put("repos", repos)
+            .put("available", available).put("installed", installed)
+    }
+
+    private suspend fun handle(context: Context, op: String, data: JSONObject): JSONObject {
+        // Seed the same official community source once, respecting any later
+        // explicit removal. Third-party sources are always opt-in.
+        val defaults = context.getSharedPreferences("valancedx_manager_plugins", Context.MODE_PRIVATE)
+        if (!defaults.getBoolean("seeded", false)) {
+            val official = "https://community.valenced.app/index.json"
+            if (RepoStore.list().none { it.url == official }) {
+                RepoStore.set(listOf(UserRepo(official)) + RepoStore.list())
+            }
+            defaults.edit().putBoolean("seeded", true).apply()
+            if (RepoStore.list().any { it.url == official && it.enabled } && RepoStore.cachedIndex(official) == null) {
+                runCatching { refreshRepo(official) }
+            }
+        }
+        when (op) {
+            "snapshot" -> return snapshot()
+            "refresh" -> {
+                val errors = mutableListOf<String>()
+                for (repo in RepoStore.list().filter { it.enabled }) {
+                    runCatching { refreshRepo(repo.url) }.onFailure { errors.add(repo.url + ": " + it.message) }
+                }
+                return snapshot(if (errors.isEmpty()) "Quellen aktualisiert." else errors.joinToString("\n").take(1400))
+            }
+            "add_repo" -> {
+                val url = validateUrl(data.getString("url"))
+                val list = RepoStore.list()
+                if (list.none { it.url == url }) {
+                    require(list.size < 12) { "Maximal 12 Quellen." }
+                    RepoStore.set(list + UserRepo(url))
+                }
+                val note = runCatching { refreshRepo(url); "Quelle hinzugefügt." }
+                    .getOrElse { "Quelle gespeichert, Indexfehler: " + it.message }
+                return snapshot(note.take(1500))
+            }
+            "toggle_repo", "remove_repo" -> {
+                val url = data.getString("url")
+                val repos = RepoStore.list()
+                require(repos.any { it.url == url }) { "Unbekannte Quelle." }
+                RepoStore.set(if (op == "remove_repo") repos.filterNot { it.url == url }
+                    else repos.map { if (it.url == url) it.copy(enabled = !it.enabled) else it })
+                return snapshot("Quellen gespeichert.")
+            }
+            "plan" -> {
+                val id = data.getString("id")
+                requireValidPluginId(id)
+                val repo = data.getString("repo")
+                require(RepoStore.list().any { it.url == repo && it.enabled }) { "Quelle nicht aktiv." }
+                val plan = invoke("planInstall", id,
+                    mapOf("targets" to mapOf(id to mapOf("repo" to repo, "compatible" to true)),
+                        "skipMissingOptionals" to true)) as? Map<*, *> ?: error("Ungültiger Installationsplan.")
+                val actions = plan["actions"] as? List<*> ?: emptyList<Any>()
+                val summary = JSONArray()
+                for (a in actions) {
+                    val item = a as? Map<*, *> ?: continue
+                    // Refuse non-HTTPS artifact URLs in native manager.
+                    require(item["url"].toString().startsWith("https://")) { "Unsicherer Download." }
+                    summary.put(JSONObject().put("id", item["id"].toString())
+                        .put("version", item["version"].toString()).put("repo", item["repo"].toString()))
+                }
+                val token = UUID.randomUUID().toString()
+                preview = Preview(token, plan, SystemClock.elapsedRealtime())
+                return JSONObject().put("token", token).put("actions", summary)
+                    .put("warnings", JSONArray((plan["warnings"] as? List<*>).orEmpty().map { it.toString().take(300) }))
+            }
+            "install" -> {
+                val pending = preview ?: error("Installationsplan abgelaufen.")
+                require(pending.token == data.getString("token") && SystemClock.elapsedRealtime() - pending.at < 120_000L) {
+                    "Installationsplan abgelaufen."
+                }
+                preview = null
+                invoke("install", pending.plan)
+                return snapshot("Installation abgeschlossen. Neue Plugins bleiben deaktiviert.")
+            }
+            "enable", "disable", "uninstall" -> {
+                val id = data.getString("id")
+                requireValidPluginId(id)
+                require(pluginRegistry.factories.containsKey(id)) { "Plugin nicht verfügbar." }
+                if (op == "uninstall") invoke("uninstall", id)
+                else invoke("setEnabled", id, op == "enable", op == "enable")
+                return snapshot("Gespeichert. Discord neu starten, um Änderungen vollständig zu übernehmen.")
+            }
+            else -> error("Unbekannte Plugin-Aktion.")
+        }
+    }
+}

@@ -33,10 +33,13 @@ internal fun HostScope.pluginSystemMethod(name: String, handler: (args: List<Any
     }
 
 internal fun HostScope.pluginSystemAsyncMethod(name: String, handler: suspend (args: List<Any?>) -> Any?) =
-    registerNativeAsyncMethod(name) { args ->
-        try {
-            handler(args).toJSPayload()
-        } catch (e: Throwable) {
-            e.toJSPayload()
+    run {
+        ManagerPluginWorker.register(name, handler)
+        registerNativeAsyncMethod(name) { args ->
+            try {
+                handler(args).toJSPayload()
+            } catch (e: Throwable) {
+                e.toJSPayload()
+            }
         }
     }
