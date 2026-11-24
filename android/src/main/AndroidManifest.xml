@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <queries>
         <package android:name="com.discord" />
     </queries>
@@ -18,6 +19,10 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service android:name="app.valenced.xposed.manager.analysis.PluginSandboxService"
+            android:isolatedProcess="true"
+            android:process=":plugin_sandbox"
+            android:exported="false" />
         <provider
             android:name="app.valenced.xposed.manager.SettingsProvider"
             android:authorities="${applicationId}.settings"

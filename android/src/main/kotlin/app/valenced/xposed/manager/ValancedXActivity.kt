@@ -34,6 +34,7 @@ import android.widget.ProgressBar
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /** An offline-first native manager. No Discord APK patcher or telemetry backend. */
 class ValancedXActivity : Activity() {
@@ -95,7 +96,7 @@ class ValancedXActivity : Activity() {
                 else->null
             }
             val key=peer.pid.toString()+"|"+request.orEmpty()
-            if(online&&request!=null&&key !in connectionSyncs&&pluginJob==null&&!restartRunning){
+            if(online&&request!=null&&key !in connectionSyncs&&pluginJob==null&&!restartRunning&&analysisJob?.isActive!=true){
                 connectionSyncs.add(key)
                 pluginAction(request)
             }
@@ -128,11 +129,13 @@ class ValancedXActivity : Activity() {
     }
     override fun onStop(){
         mainHandler.removeCallbacks(connectionTick)
+        analysisJob?.cancel()
         liveConnection.stop()
         super.onStop()
     }
     override fun onDestroy(){
         mainHandler.removeCallbacks(connectionTick)
+        analysisScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         liveConnection.destroy()
         super.onDestroy()
     }
@@ -158,7 +161,7 @@ class ValancedXActivity : Activity() {
         }.getOrNull()
         discordThemeState=pluginData?.optJSONObject("themeState")
         currentTab = (savedInstanceState?.getInt("tab") ?: prefs.getInt("manager_tab",0)).coerceIn(0, tabs.lastIndex)
-        pluginPage = (savedInstanceState?.getInt("pluginPage") ?: prefs.getInt("manager_plugin_page",0)).coerceIn(0,3)
+        pluginPage = (savedInstanceState?.getInt("pluginPage") ?: prefs.getInt("manager_plugin_page",0)).coerceIn(0,5)
         themePage = (savedInstanceState?.getInt("themePage") ?: prefs.getInt("manager_theme_page",0)).coerceIn(0,1)
         themeKind = savedInstanceState?.getString("themeKind") ?: prefs.getString("manager_theme_kind","themes") ?: "themes"
         pluginQuery = savedInstanceState?.getString("pluginQuery").orEmpty()
@@ -824,7 +827,7 @@ class ValancedXActivity : Activity() {
     }
 
     private fun pluginAction(operation: String, data: JSONObject = JSONObject()) {
-        if (pluginJob != null || restartRunning) {
+        if (pluginJob != null || restartRunning || analysisJob?.isActive==true) {
             Toast.makeText(this,"Eine Aktion läuft bereits.",Toast.LENGTH_SHORT).show();return
         }
         connectionGranted = grantConnection()
@@ -1413,6 +1416,7 @@ class ValancedXActivity : Activity() {
                 if(item.optBoolean("failed"))errorColor else if(enabled)mintColor else mutedColor)
             add(this,operationButton(if(enabled)"Deaktivieren" else "Aktivieren",if(enabled)"disable" else "enable",
                 JSONObject().put("id",id),!enabled),top=8)
+            analysisEntry(this,item,"installed")
         }
         eyebrow(parent,"IMPORTIERTE LEGACY-PLUGINS")
         val imported=entries.filter{it.optString("id").startsWith("veyra.legacy.")&&it.optString("id")!="veyra.legacy.compat"}
@@ -1425,6 +1429,7 @@ class ValancedXActivity : Activity() {
             statusRow(this,"Original-JS",if(item.optBoolean("failed"))"Fehler" else if(enabled)"Aktiviert" else "Aus",
                 if(item.optBoolean("failed"))errorColor else if(enabled)mintColor else mutedColor)
             add(this,operationButton(if(enabled)"Deaktivieren" else "Aktivieren",if(enabled)"disable" else "enable",JSONObject().put("id",id)),top=8)
+            analysisEntry(this,item,"installed")
             add(this,button("Deinstallieren",destructive=true){
                 AlertDialog.Builder(this@ValancedXActivity).setTitle("Legacy-Plugin entfernen?")
                     .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen"){_,_->pluginAction("uninstall",JSONObject().put("id",id))}.show()
@@ -1449,16 +1454,211 @@ class ValancedXActivity : Activity() {
         twoActions(parent,button("Revenge Archiv"){openWeb("https://github.com/revenge-mod/revenge-community-plugins")},button("Vendetta Archiv"){openWeb("https://vd-plugins.github.io/web/")})
     }
 
+
+    private val analysisScope=kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()+kotlinx.coroutines.Dispatchers.Main.immediate)
+    private val analyzer by lazy { app.valenced.xposed.manager.analysis.PluginAnalyzer(applicationContext){liveConnection.signal()} }
+    private var analysisJob:kotlinx.coroutines.Job?=null
+    private var analysisNote="Lokaler Analyzer bereit"
+    private var analysisLabel:TextView?=null
+    private var analysisQuery=""
+    private var analysisFilter="installed"
+    private var analysisLimit=60
+    private var vencordQuery=""
+    private var vencordLimit=60
+    private val vencordCatalog by lazy {
+        runCatching{app.valenced.xposed.manager.analysis.VencordTranslator.catalog(this)}.getOrElse{JSONObject()}
+    }
+    private fun analysisItems(kind:String):List<JSONObject>{
+        val arr=if(kind=="vencord")vencordCatalog.optJSONArray("plugins")
+            else pluginData?.optJSONArray(if(kind=="catalog")"available" else "installed")
+        return (0 until (arr?.length()?:0)).mapNotNull{arr?.optJSONObject(it)}
+    }
+    private fun analysisProgress(note:String){
+        analysisNote=note
+        analysisLabel?.text=note
+    }
+    private fun showAnalysis(item:JSONObject,r:JSONObject){
+        val text=StringBuilder()
+        if(r.has("error"))text.append("Analyse nicht abgeschlossen: ").append(r.optString("error"))
+        else{
+            text.append("Deklarierte Funktion\n").append(r.optString("declared").ifBlank{item.optString("description","Keine Beschreibung")})
+            text.append("\n\nGeprüft: ").append(r.optInt("sourceBytes")).append(" Quelltext-Bytes · ").append(r.optInt("files")).append(" Datei(en)")
+            text.append("\nIsolierter Prozess: ").append(if(r.optBoolean("isolated"))"Ja" else "Nicht bestätigt")
+            val test=r.optJSONObject("test")
+            text.append("\n\nSandbox-Test\n").append(test?.optString("status").orEmpty())
+            test?.optString("detail")?.takeIf{it.isNotBlank()}?.let{text.append("\n").append(it)}
+            val trace=test?.optJSONArray("trace")
+            for(i in 0 until(trace?.length()?:0))text.append("\n• ").append(trace?.optString(i))
+            text.append("\n\nErkannte Code-Merkmale")
+            val findings=r.optJSONArray("findings")
+            if((findings?.length()?:0)==0)text.append("\nKeine Merkmale erkannt. Das ist kein Sicherheitsnachweis.")
+            for(i in 0 until(findings?.length()?:0)){
+                val f=findings?.optJSONObject(i)?:continue
+                text.append("\n\n").append(f.optString("category")).append(": ").append(f.optString("description"))
+                val evidence=f.optJSONArray("evidence")
+                if(evidence!=null)text.append("\nHinweise: ").append((0 until evidence.length()).joinToString(", "){evidence.optString(it)})
+            }
+            r.optJSONObject("translation")?.let{plan->
+                text.append("\n\nVencord → Mobile\n")
+                if(plan.optBoolean("supported"))text.append(plan.optString("adaptation")).append("\n").append(plan.optString("limitation"))
+                else text.append(plan.optString("reason"))
+            }
+            if(r.optBoolean("native"))text.append("\n\nNative Komponenten wurden nicht ausgeführt.")
+            r.optString("sourceCoverage").takeIf{it.isNotBlank()}?.let{text.append("\n").append(it)}
+            text.append("\n\n").append(r.optString("disclaimer"))
+        }
+        AlertDialog.Builder(this).setTitle(item.optString("name","Plugin-Analyse")).setMessage(text.toString())
+            .setNeutralButton("Kopieren"){_,_->(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("ValancedX Plugin-Analyse",text.toString()))}
+            .setPositiveButton("Schließen",null).show()
+    }
+    private fun startAnalysis(items:List<JSONObject>,kind:String,show:Boolean=false,translate:Boolean=false){
+        if(items.isEmpty())return
+        if(pluginJob!=null||restartRunning||analysisJob?.isActive==true){
+            Toast.makeText(this,"Eine Aktion läuft bereits.",Toast.LENGTH_SHORT).show();return
+        }
+        val queue=items.distinctBy{analyzer.key(it,kind)}
+        var last:JSONObject?=null
+        analysisJob=analysisScope.launch(start=kotlinx.coroutines.CoroutineStart.LAZY){
+            var done=0;var failures=0
+            try{
+                for(item in queue){
+                    analysisProgress("Analysiere "+(done+1)+"/"+queue.size+" · "+item.optString("name"))
+                    val r=analyzer.scan(item,kind)
+                    last=r;done++;if(r.has("error"))failures++
+                }
+                analysisProgress(done.toString()+" analysiert · "+failures+" nicht abgeschlossen")
+            }catch(e:kotlinx.coroutines.CancellationException){analysisProgress("Analyse gestoppt · "+done+" abgeschlossen");throw e}
+            finally{analysisJob=null}
+            if(isFinishing||isDestroyed)return@launch
+            if(currentTab==2&&(pluginPage==4||pluginPage==5))render(preserveScroll=true)
+            val result=last
+            if(translate&&result!=null){
+                val plan=result.optJSONObject("translation")
+                if(!result.has("error")&&plan?.optBoolean("supported")==true){
+                    pluginAction("vencord_activate",JSONObject().put("id",queue.first().optString("id")).put("sha256",queue.first().optString("sha256")))
+                }else showAnalysis(queue.first(),result)
+            }else if(show&&result!=null)showAnalysis(queue.first(),result)
+        }
+        analysisProgress("Sandbox wird vorbereitet …")
+        analysisJob?.start()
+        if(currentTab==2&&(pluginPage==4||pluginPage==5))render(preserveScroll=true)
+    }
+    private fun analysisEntry(parent:LinearLayout,item:JSONObject,kind:String){
+        val report=analyzer.report(item,kind)
+        add(parent,button(if(report==null)"Analysieren" else "Analyse ansehen"){
+            if(report==null)startAnalysis(listOf(item),kind,show=true) else showAnalysis(item,report)
+        },top=7)
+    }
+    private fun analysisScreen(parent:LinearLayout){
+        eyebrow(parent,"PLUGIN LAB · LOKAL")
+        card(parent,top=8){
+            add(this,label("Plugin Analyzer",23f,whiteColor,true))
+            add(this,label("Getrennter Android-Prozess je Plugin. Statische Codeanalyse und begrenzter JS-Lifecycle-Test mit simulierten APIs. Keine Discord-Daten oder Root-Zugriffe.",12f,mutedColor),top=6)
+            analysisLabel=label(analysisNote,12f,accentColor)
+            add(this,analysisLabel!!,top=8)
+            if(analysisJob?.isActive==true)add(this,button("Analyse stoppen"){analysisJob?.cancel();render(preserveScroll=true)},top=8)
+        }
+        segmented(parent,listOf("Installiert","Katalog"),if(analysisFilter=="installed")0 else 1,{i->
+            analysisFilter=if(i==0)"installed" else "catalog";analysisLimit=60;analysisQuery="";render(preserveScroll=true)
+        })
+        val kind=analysisFilter
+        val items=analysisItems(kind)
+        val pending=items.filter{analyzer.report(it,kind)?.let{r->!r.has("error")}!=true}
+        twoActions(parent,button("Alle analysieren",true){
+            AlertDialog.Builder(this).setTitle(items.size.toString()+" Plugins lokal analysieren?")
+                .setMessage("Katalogdateien werden von ihren Quellen geladen. Jeder Test hat eine eigene Sandbox. Keine Installation oder Aktivierung.")
+                .setNegativeButton("Abbrechen",null).setPositiveButton("Starten"){_,_->startAnalysis(items,kind)}.show()
+        },button("Offene analysieren"){startAnalysis(pending,kind)})
+        val search=EditText(this).apply{hint="Plugin suchen …";setText(analysisQuery);setTextColor(whiteColor);setHintTextColor(mutedColor);setSingleLine(true);background=rounded(surfaceColor,borderColor,14);setPadding(dp(12),dp(10),dp(12),dp(10))}
+        add(parent,search,top=9)
+        val list=column();add(parent,list,top=5)
+        fun draw(){
+            list.removeAllViews()
+            val matching=items.filter{it.optString("name").contains(analysisQuery,true)||it.optString("id").contains(analysisQuery,true)}
+            eyebrow(list,matching.size.toString()+" PLUGINS · "+(items.size-pending.size)+" ANALYSIERT")
+            for(item in matching.take(analysisLimit))card(list,top=7){
+                tag="vx-analysis-"+analyzer.key(item,kind)
+                add(this,label(item.optString("name"),15f,whiteColor,true))
+                val report=analyzer.report(item,kind)
+                add(this,label(if(report==null)"Noch nicht analysiert" else if(report.has("error"))"Analyse unvollständig" else report.optJSONObject("test")?.optString("status").orEmpty(),11f,if(report?.has("error")==true)warmColor else mutedColor),top=4)
+                twoActions(this,button(if(report==null)"Analysieren" else "Bericht",true){if(report==null)startAnalysis(listOf(item),kind,true)else showAnalysis(item,report)},
+                    button("Neu testen"){startAnalysis(listOf(item),kind,true)})
+            }
+            if(matching.size>analysisLimit)add(list,button("Weitere anzeigen"){analysisLimit+=60;draw()},top=8)
+        }
+        draw()
+        search.addTextChangedListener(object:android.text.TextWatcher{
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){analysisQuery=s?.toString().orEmpty();analysisLimit=60;draw()}
+            override fun afterTextChanged(s:android.text.Editable?){}
+        })
+    }
+    private fun vencordScreen(parent:LinearLayout){
+        eyebrow(parent,"VENCORD → MOBILE")
+        val entries=analysisItems("vencord")
+        val supported=entries.count{app.valenced.xposed.manager.analysis.VencordTranslator.plan(it.optString("id"),it.optString("sha256")).optBoolean("supported")}
+        card(parent,top=8){
+            add(this,label("Plugin Translator",23f,whiteColor,true))
+            add(this,label(entries.size.toString()+" Desktop-Plugins · "+supported+" vorbereitete Mobile-Regeln",13f,mintColor),top=5)
+            add(this,label("Beim Aktivieren wird der gepinnte Vencord-Quellcode lokal geprüft und eine passende integrierte Mobile-Implementierung ausgewählt. Unbekannte Webpack-, CSS- und Node-Hooks werden nicht blind ausgeführt.",12f,mutedColor),top=6)
+            add(this,label("Revision: "+vencordCatalog.optString("revision").take(12),10f,mutedColor),top=6)
+            analysisLabel=label(analysisNote,11f,accentColor);add(this,analysisLabel!!,top=5)
+            if(analysisJob?.isActive==true)add(this,button("Analyse stoppen"){analysisJob?.cancel();render(preserveScroll=true)},top=7)
+        }
+        val search=EditText(this).apply{hint="Vencord-Plugin suchen …";setText(vencordQuery);setTextColor(whiteColor);setHintTextColor(mutedColor);setSingleLine(true);background=rounded(surfaceColor,borderColor,14);setPadding(dp(12),dp(10),dp(12),dp(10))}
+        add(parent,search,top=10)
+        val list=column();add(parent,list,top=5)
+        val installed=analysisItems("installed")
+        fun draw(){
+            list.removeAllViews()
+            val matching=entries.filter{it.optString("name").contains(vencordQuery,true)||it.optString("id").contains(vencordQuery,true)}
+                .sortedWith(compareByDescending<JSONObject>{app.valenced.xposed.manager.analysis.VencordTranslator.rules.containsKey(it.optString("id"))}.thenBy{it.optString("name").lowercase(Locale.ROOT)})
+            for(item in matching.take(vencordLimit))card(list,top=8){
+                val id=item.optString("id")
+                val plan=app.valenced.xposed.manager.analysis.VencordTranslator.plan(id,item.optString("sha256"))
+                val ready=plan.optBoolean("supported")
+                val target=plan.optString("target")
+                val active=ready&&installed.any{it.optString("id")==target&&it.optBoolean("enabled")}
+                tag="vx-vencord-"+id
+                add(this,label(item.optString("name"),16f,whiteColor,true))
+                add(this,label(item.optString("description"),12f,mutedColor),top=4)
+                add(this,label(if(active)"Mobile-Port aktiviert" else if(ready)"Übersetzungsregel verfügbar" else "Manueller Port erforderlich",11f,if(ready)mintColor else warmColor),top=5)
+                if(ready){
+                    add(this,label(plan.optString("adaptation"),12f,whiteColor),top=6)
+                    add(this,label(plan.optString("limitation"),11f,mutedColor),top=4)
+                    add(this,button(if(active)"Mobile-Port deaktivieren" else "Übersetzen & aktivieren",!active){
+                        if(active)pluginAction("vencord_disable",JSONObject().put("id",id))
+                        else startAnalysis(listOf(item),"vencord",translate=true)
+                    },top=7)
+                }else{
+                    val flags=listOfNotNull(if(item.optBoolean("native"))"Node.js" else null,if(item.optBoolean("css"))"CSS" else null,if(item.optBoolean("patches"))"Webpack-Patches" else null)
+                    if(flags.isNotEmpty())add(this,label(flags.joinToString(" · "),11f,mutedColor),top=4)
+                }
+                analysisEntry(this,item,"vencord")
+            }
+            if(matching.size>vencordLimit)add(list,button("Weitere anzeigen"){vencordLimit+=60;draw()},top=8)
+        }
+        draw()
+        search.addTextChangedListener(object:android.text.TextWatcher{
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){vencordQuery=s?.toString().orEmpty();vencordLimit=60;draw()}
+            override fun afterTextChanged(s:android.text.Editable?){}
+        })
+    }
+
     private fun pluginScreen(parent: LinearLayout) {
         eyebrow(parent, "PLUGIN MANAGER")
         add(parent, label("Plugins", 27f, whiteColor, true), top = 4)
         add(parent, label("Installieren, verwalten und Quellen hinzufügen.", 13f, mutedColor), top = 5)
-        segmented(parent,listOf("Installiert","Entdecken","Quellen","Legacy"),pluginPage,{i->
+        segmented(parent,listOf("Installiert","Entdecken","Quellen","Legacy"),if(pluginPage<=3)pluginPage else -1,{i->
             pluginPage=i;pluginQuery="";render()
             if(pluginData==null&&pluginJob==null)pluginAction("snapshot")
         },15)
+        twoActions(parent,button("Analyse",pluginPage==4){pluginPage=4;render()},button("Vencord",pluginPage==5){pluginPage=5;render()},top=7)
         discoveryControls.clear()
         busyStrip(parent)
+        if(pluginPage==4){analysisScreen(parent);return}
+        if(pluginPage==5){vencordScreen(parent);return}
         if(pluginPage==2){sourceScreen(parent);return}
         if(pluginPage==3){legacyScreen(parent);return}
         twoActions(parent,operationButton("Aktualisieren",if(pluginPage==0)"snapshot" else "refresh"),
@@ -1530,6 +1730,7 @@ class ValancedXActivity : Activity() {
                         addView(progress, LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(3) })
                         discoveryControls[pluginKey(id,repo)] = DiscoveryControl(install,progress)
                     }
+                    analysisEntry(this,item,if(pluginPage==0)"installed" else "catalog")
                 }
             }
             updateDiscoveryControls()
@@ -1562,7 +1763,7 @@ class ValancedXActivity : Activity() {
             runCatching{find(old)}.getOrNull()
         }else null
         busyLabel=null;busyProgress=null;busyCancel=null;actionControls.clear()
-        connectionText=null;connectionDot=null
+        connectionText=null;connectionDot=null;analysisLabel=null
         restoredScrollY = 0
         discoveryControls.clear()
         readTheme()

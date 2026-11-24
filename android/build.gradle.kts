@@ -17,8 +17,8 @@ android {
         applicationId = "ctrl.mietze.valacedxposed"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 10018
-        versionName = "1.0.18"
+        versionCode = 10019
+        versionName = "1.0.19"
     }
 
     sourceSets {
@@ -80,6 +80,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
+    implementation("org.mozilla:rhino:1.7.15")
+    testImplementation("org.json:json:20250517")
 
     testImplementation(libs.kotlin.test)
 }
@@ -97,6 +99,10 @@ abstract class BundleAssets @Inject constructor(private val fs: FileSystemOperat
     @get:PathSensitive(PathSensitivity.NAME_ONLY)
     abstract val bundle: ConfigurableFileCollection
 
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val pluginSources: DirectoryProperty
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -104,6 +110,11 @@ abstract class BundleAssets @Inject constructor(private val fs: FileSystemOperat
     fun copy() {
         fs.sync {
             from(bundle) { include("valenced.bundle", "manifest.json") }
+            from(pluginSources) {
+                include("**/*.ts", "**/*.tsx", "**/manifest.json")
+                exclude("**/*.test.ts", "**/*.test.tsx")
+                into("analysis-internal")
+            }
             into(outputDir)
         }
     }
@@ -113,6 +124,7 @@ androidComponents {
     onVariants { variant ->
         val assets = tasks.register<BundleAssets>("${variant.name}BundleAssets") {
             bundle.from(bundles.getValue(variant.buildType!!))
+            pluginSources.set(rootProject.layout.projectDirectory.dir("bundle/src/plugins"))
         }
         variant.sources.assets?.addGeneratedSourceDirectory(assets, BundleAssets::outputDir)
     }

@@ -21,6 +21,7 @@ import app.valenced.xposed.PluginHttps
 import app.valenced.xposed.ETagFetchResult
 import app.valenced.plugins.repos.parseRepoIndex
 import app.valenced.plugins.repos.sha256Hex
+import app.valenced.xposed.manager.analysis.VencordTranslator
 import app.valenced.xposed.manager.HookPolicy
 import app.valenced.xposed.manager.HookMode
 import app.valenced.xposed.manager.ModuleSettings
@@ -210,9 +211,11 @@ internal object ManagerPluginWorker {
             for ((id, plugin) in index.plugins) {
                 if (available.length() >= 350) break
                 val version = plugin.channels["latest"] ?: continue
+                val artifact = plugin.versions[version] ?: continue
                 available.put(JSONObject().put("id", id).put("name", plugin.name.take(100))
                     .put("description", plugin.description.take(180)).put("author", plugin.author.take(80))
                     .put("version", version).put("repo", repo.url)
+                    .put("artifactUrl",artifact.url).put("artifactSize",artifact.size).put("artifactSha256",artifact.sha256)
                     .put("themePack", plugin.versions[version]?.dependencies?.containsKey("valenced.api.themes") == true &&
                         id !in setOf("valenced.settings.themes","valenced.themes.legacy"))
                     .put("installed", pluginRegistry.factories.containsKey(id))
@@ -255,6 +258,22 @@ internal object ManagerPluginWorker {
             }
         }
         when (op) {
+            "analysis_prepare" -> return JSONObject().put("analysisInput",AnalysisExport.prepare(context.applicationInfo.dataDir,data.getString("id")))
+            "analysis_chunk" -> return JSONObject().put("analysisChunk",AnalysisExport.chunk(data.getString("token"),data.getInt("offset")))
+            "vencord_activate","vencord_disable" -> {
+                val id=data.getString("id")
+                val rule=VencordTranslator.rules[id]?:error("Kein Mobile-Adapter vorhanden.")
+                if(op=="vencord_activate"){
+                    require(data.optString("sha256")==rule.sourceHash){"Vencord-Quellrevision nicht unterstützt."}
+                    require(pluginRegistry.factories.containsKey(rule.port)){"Mobile-Port fehlt."}
+                    conflictingPort(rule.port)?.let{error("Gleichartiges Plugin aktiv: "+it+". Zuerst deaktivieren.")}
+                    if(!legacyEnabled())invoke("setEnabled","veyra.legacy.compat",true,true)
+                    invoke("setEnabled",rule.port,true,true)
+                    return snapshot("Vencord-Mobile-Port aktiviert. Falls nötig Discord neu starten.")
+                }
+                invoke("setEnabled",rule.port,false,false)
+                return snapshot("Vencord-Mobile-Port deaktiviert.")
+            }
             "legacy_mode" -> {
                 val enabled=data.getBoolean("enabled")
                 if(!enabled){
