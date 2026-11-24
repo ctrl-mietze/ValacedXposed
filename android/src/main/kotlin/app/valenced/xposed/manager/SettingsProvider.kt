@@ -34,6 +34,10 @@ class SettingsProvider : ContentProvider() {
 
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return when (method) {
+            "plugin_heartbeat" -> {
+                if(!isDiscord)throw SecurityException("Only Discord can publish live connection status")
+                ManagerConnection.heartbeat(Binder.getCallingPid(),extras)
+            }
             "plugin_claim" -> {
                 if (!isDiscord) throw SecurityException("Only Discord can claim plugin actions")
                 if(extras?.getInt("manager_version",0)!=BuildConfig.VERSION_CODE) {

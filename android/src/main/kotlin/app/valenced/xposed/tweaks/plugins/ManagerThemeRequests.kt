@@ -22,6 +22,7 @@ internal object ManagerThemeRequests {
         val response:CompletableDeferred<String>,var claimed:Boolean=false)
     private var pending:Request?=null
     @Volatile private var ready=false
+    fun isReady():Boolean=ready&&ValencedBridgeRegistry.isReady
     fun markReady() {
         ready=true
         Log.i("ValancedXTheme","JS dispatcher ready")

@@ -1,6 +1,13 @@
 package app.valenced.xposed.tweaks.plugins
 
 import android.content.Context
+import android.content.Intent
+import android.database.ContentObserver
+import android.os.Process
+import app.valenced.xposed.manager.DiscordConnectionEndpoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeoutOrNull
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
@@ -57,9 +64,58 @@ internal object ManagerPluginWorker {
     fun start(context: Context) {
         if (!started.compareAndSet(false, true)) return
         val ctx = context.applicationContext ?: context
-        val uri = Uri.parse("content://" + BuildConfig.APPLICATION_ID + ".settings/connection")
-        pluginJobScope.launch {
+        val uri = DiscordConnectionEndpoint.managerUri
+        val visible=AtomicBoolean(false)
+        val offered=AtomicBoolean(false)
+        val wake=Channel<Unit>(Channel.CONFLATED)
+        val heartbeatWake=Channel<Unit>(Channel.CONFLATED)
+        fun signalWorker(){wake.trySend(Unit);heartbeatWake.trySend(Unit)}
+        val observer=object:ContentObserver(null){
+            override fun onChange(selfChange:Boolean){signalWorker()}
+            override fun onChange(selfChange:Boolean,changed:Uri?){signalWorker()}
+        }
+        // The host's FileProvider deliberately does not map the lease URI to a
+        // file. Grant only that exact URI; the manager never performs a file
+        // operation. Its unstable client reference is held only while visible.
+        pluginJobScope.launch(Dispatchers.IO){
+            var lastGrant=0L
+            while(true){
+                try{
+                    val config=ModuleSettings.current()
+                    val enabled=HookPolicy.resolve(config.enabled,config.javascriptEnabled,config.safeMode)==HookMode.FULL
+                    val state=ctx.contentResolver.call(uri,"plugin_heartbeat",null,Bundle().apply{
+                        putInt("pid",Process.myPid())
+                        putInt("manager_version",BuildConfig.VERSION_CODE)
+                        putBoolean("theme_ready",ManagerThemeRequests.isReady())
+                        putBoolean("enabled",enabled)
+                        putBoolean("provider_offered",offered.get())
+                    })
+                    val nowVisible=state?.getBoolean("visible",false)==true
+                    if(visible.getAndSet(nowVisible)!=nowVisible)wake.trySend(Unit)
+                    val now=SystemClock.elapsedRealtime()
+                    if(nowVisible&&enabled&&(!offered.get()||now-lastGrant>15000L)){
+                        lastGrant=now
+                        offered.set(runCatching{
+                            val info=ctx.packageManager.resolveContentProvider(DiscordConnectionEndpoint.AUTHORITY,0)
+                            check(info?.packageName==DiscordConnectionEndpoint.HOST &&
+                                info.processName==DiscordConnectionEndpoint.HOST &&
+                                info.name=="androidx.core.content.FileProvider" && info.grantUriPermissions)
+                            ctx.grantUriPermission(BuildConfig.APPLICATION_ID,DiscordConnectionEndpoint.uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            true
+                        }.onFailure{android.util.Log.w("ValancedXLink","Provider lease unavailable",it)}.getOrDefault(false))
+                        if(offered.get())heartbeatWake.trySend(Unit)
+                    }
+                }catch(e:Exception){visible.set(false)}
+                withTimeoutOrNull(if(visible.get())900L else 4000L){heartbeatWake.receive()}
+            }
+        }
+        pluginJobScope.launch(Dispatchers.IO) {
+            var observing=false
             while (true) {
+                if(!observing)observing=runCatching{
+                    ctx.contentResolver.registerContentObserver(uri,false,observer)
+                    true
+                }.getOrDefault(false)
                 try {
                     val job = ctx.contentResolver.call(uri, "plugin_claim", null, Bundle().apply { putInt("manager_version",BuildConfig.VERSION_CODE) })
                     val id = job?.getString("id")
@@ -95,7 +151,8 @@ internal object ManagerPluginWorker {
                 } catch (_: Exception) {
                     // Manager may be uninstalled or visibility not granted yet.
                 }
-                delay(2000)
+                // Notification-driven normally, short bounded polling as fallback.
+                withTimeoutOrNull(if(visible.get())600L else 4000L){wake.receive()}
             }
         }
     }

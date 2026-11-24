@@ -75,6 +75,67 @@ class ValancedXActivity : Activity() {
     private var currentTab = 0
     private var scrollView: ScrollView? = null
     private var connectionGranted = false
+    private val liveConnection by lazy {DiscordConnectionController(applicationContext)}
+    private var connectionText:TextView?=null
+    private var connectionDot:View?=null
+    private val connectionSyncs=mutableSetOf<String>()
+    private var connectionWasOnline=false
+    private val connectionTick=object:Runnable{
+        override fun run(){
+            ManagerConnection.renew()
+            updateConnectionStatus()
+            val peer=ManagerConnection.status()
+            val online=peer.online()
+            if(!online&&connectionWasOnline)connectionSyncs.clear()
+            connectionWasOnline=online
+            // One fresh read per view/peer session, never interrupt a real operation.
+            val request=when{
+                currentTab==3&&themePage==0&&peer.themeReady->"theme_snapshot"
+                currentTab==2->"snapshot"
+                else->null
+            }
+            val key=peer.pid.toString()+"|"+request.orEmpty()
+            if(online&&request!=null&&key !in connectionSyncs&&pluginJob==null&&!restartRunning){
+                connectionSyncs.add(key)
+                pluginAction(request)
+            }
+            mainHandler.postDelayed(this,650L)
+        }
+    }
+    private fun updateConnectionStatus(){
+        val peer=ManagerConnection.status()
+        val online=peer.online()
+        val staleVersion=peer.fresh()&&peer.version!=BuildConfig.VERSION_CODE
+        val text=when{
+            online&&peer.themeReady->"Discord verbunden"
+            online->"Discord · JS startet"
+            staleVersion->"Discord neu starten"
+            peer.fresh()&&!peer.enabled->"Modul deaktiviert"
+            else->"Discord verbinden …"
+        }
+        val tint=if(online&&peer.themeReady)mintColor else warmColor
+        connectionText?.let{v->if(v.text.toString()!=text||v.currentTextColor!=tint){v.text=text;v.setTextColor(tint)}}
+        connectionDot?.let{v->if(v.tag!=tint){v.background=rounded(tint,tint,6);v.tag=tint}}
+    }
+    override fun onStart(){
+        super.onStart()
+        connectionGranted=grantConnection()
+        connectionSyncs.clear()
+        connectionWasOnline=false
+        liveConnection.start()
+        mainHandler.removeCallbacks(connectionTick)
+        mainHandler.post(connectionTick)
+    }
+    override fun onStop(){
+        mainHandler.removeCallbacks(connectionTick)
+        liveConnection.stop()
+        super.onStop()
+    }
+    override fun onDestroy(){
+        mainHandler.removeCallbacks(connectionTick)
+        liveConnection.destroy()
+        super.onDestroy()
+    }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val refresh = Runnable { if (currentTab != 2 && currentTab != 3) render(preserveScroll = true) }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -117,8 +178,7 @@ class ValancedXActivity : Activity() {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         render(preserveScroll = true)
         if (pluginJob != null) {mainHandler.removeCallbacks(pluginPoll);mainHandler.post(pluginPoll)}
-        else if(currentTab==2&&pluginData==null)pluginAction("snapshot")
-        else if(currentTab==3&&themePage==0)pluginAction("theme_snapshot")
+        updateConnectionStatus()
     }
 
     override fun onPause() {
@@ -670,7 +730,7 @@ class ValancedXActivity : Activity() {
             if (raw == null) {
                 updateBusyStrip()
                 updateDiscoveryControls()
-                mainHandler.postDelayed(this, 350)
+                mainHandler.postDelayed(this, if(ManagerConnection.status().online())150L else 350L)
                 return
             }
             val target = pluginTarget
@@ -681,6 +741,11 @@ class ValancedXActivity : Activity() {
                 pluginNote = result.optString("error")
                 if(lastActionKey?.startsWith("theme_")==true) {
                     discordThemeState=discordThemeState?.let{JSONObject(it.toString()).put("ready",false).put("message",pluginNote)}
+                }
+                if(lastActionKey?.startsWith("theme_snapshot|")==true||lastActionKey?.startsWith("snapshot|")==true){
+                    // Permit another automatic sync after a genuine reconnect,
+                    // not a tight retry loop during a server-side failure.
+                    if(!ManagerConnection.status().online())connectionSyncs.clear()
                 }
                 pluginFailedTarget = target
                 Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_LONG).show()
@@ -771,6 +836,7 @@ class ValancedXActivity : Activity() {
                 pluginFailedTarget = null
                 pluginNote = "Discord verarbeitet die Aktion …"
                 mainHandler.removeCallbacks(pluginPoll)
+                liveConnection.signal()
                 mainHandler.post(pluginPoll)
             }.onFailure {
                 pluginNote = it.message.orEmpty()
@@ -1195,7 +1261,7 @@ class ValancedXActivity : Activity() {
         if(themePage==1){themeScreen(parent);return}
         busyStrip(parent)
         val state=discordThemeState
-        val ready=state?.optBoolean("ready")==true
+        val ready=state?.optBoolean("ready")==true && ManagerConnection.status().online() && ManagerConnection.status().themeReady
         card(parent,top=12){
             add(this,label("DISCORD THEME ENGINE",11f,accentColor,true))
             add(this,label(if(ready)"Verbunden" else if(pluginJob!=null)"Verbindet …" else "Nicht verbunden",22f,whiteColor,true),top=8)
@@ -1442,6 +1508,7 @@ class ValancedXActivity : Activity() {
             runCatching{find(old)}.getOrNull()
         }else null
         busyLabel=null;busyProgress=null;busyCancel=null;actionControls.clear()
+        connectionText=null;connectionDot=null
         restoredScrollY = 0
         discoveryControls.clear()
         readTheme()
@@ -1457,6 +1524,15 @@ class ValancedXActivity : Activity() {
         val title = column().apply { setPadding(dp(11), 0, 0, 0) }
         add(title, label("ValancedX", 23f, whiteColor, true))
         add(title, label("XPOSED  /  " + BuildConfig.VERSION_NAME, 10f, mutedColor, true), top = 3)
+        val link=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
+        connectionDot=View(this)
+        link.addView(connectionDot,LinearLayout.LayoutParams(dp(6),dp(6)).apply{rightMargin=dp(5)})
+        connectionText=label("Discord verbinden …",10f,mutedColor,true)
+        link.addView(connectionText,LinearLayout.LayoutParams(-2,-2))
+        link.contentDescription="Discord-Verbindungsstatus"
+        link.setOnClickListener{if(!ManagerConnection.status().online())openDiscord() else liveConnection.signal()}
+        add(title,link,top=4)
+        updateConnectionStatus()
         header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
         fun headerIcon(name:String,description:String,action:()->Unit): View =
             LinearLayout(this).apply {
