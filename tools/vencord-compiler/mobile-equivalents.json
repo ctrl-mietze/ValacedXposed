@@ -1,0 +1,146 @@
+[
+  {
+    "id": "anonymiseFileNames",
+    "target": "k1ngop.anonymous-file-names",
+    "adaptation": "Upload-Hook statt Webpack-Upload-Patch.",
+    "limitation": "Mobile Dateinamen-Optionen können vom Desktop abweichen."
+  },
+  {
+    "id": "addAttachments",
+    "target": "wolfie.add-attachments",
+    "adaptation": "Mobile Editier-/Attachment-UI.",
+    "limitation": "Keine Desktop-Paste- oder Maus-Integration."
+  },
+  {
+    "id": "blurNsfw",
+    "target": "thororen.nsfw-blur",
+    "adaptation": "Mobile Medien- und NSFW-Darstellung.",
+    "limitation": "Touch statt Hover; Medien bleiben unter den vorhandenen Zugriffsregeln."
+  },
+  {
+    "id": "disableCallIdle",
+    "target": "k1ngop.disable-call-idle",
+    "adaptation": "Mobile Call-Idle-Logik.",
+    "limitation": "Deckt leere DM-Anrufe ab; AFK-Serververhalten nicht zugesichert."
+  },
+  {
+    "id": "forceOwnerCrown",
+    "target": "hakuxyz.force-owner-crown",
+    "adaptation": "Mobile Namens-/Owner-Darstellung.",
+    "limitation": "Lokale Darstellung des tatsächlichen Owners."
+  },
+  {
+    "id": "jumpToTop",
+    "target": "dev.tralwdwdd.jump-to-top",
+    "adaptation": "Mobiler Sprung zum ersten Beitrag.",
+    "limitation": "Bedienung über mobile UI."
+  },
+  {
+    "id": "mentionAvatars",
+    "target": "palmdevs.mention-avatars",
+    "adaptation": "Native Android-Mentions statt DOM.",
+    "limitation": "Eigene mobile Darstellung und native Komponente."
+  },
+  {
+    "id": "messageLinkEmbeds",
+    "target": "palmdevs.message-link-preview",
+    "adaptation": "Mobile Nachrichtenlink-Vorschau.",
+    "limitation": "Eigene Preview-Interaktion; nur zugängliche Nachrichten."
+  },
+  {
+    "id": "noBlockedMessages",
+    "target": "palmdevs.hide-blocked-messages",
+    "adaptation": "Lokale Filterung blockierter Nachrichten.",
+    "limitation": "Keine vollständige Desktop-Store-/Unread-Logik garantiert."
+  },
+  {
+    "id": "noMosaic",
+    "target": "dxckie.no-mosaic",
+    "adaptation": "Mobile Anordnung von Medien.",
+    "limitation": "Optionen zum Inline-Video unterscheiden sich."
+  },
+  {
+    "id": "oneko",
+    "target": "hakuxyz.oneko",
+    "adaptation": "Touch-Tracking statt Mausbewegung.",
+    "limitation": "Mobile Skins/Optionen statt Desktop-Cursor."
+  },
+  {
+    "id": "petpet",
+    "target": "dev.cocobo1.petpet",
+    "adaptation": "Mobile Slash-Command-API.",
+    "limitation": "Mobile Auswahlmöglichkeiten; keine Gleichheit sämtlicher Bildquellen zugesichert."
+  },
+  {
+    "id": "readAllNotificationsButton",
+    "target": "dev.nexza.read-all-notifications",
+    "adaptation": "Mobile Serverleisten-Schaltfläche.",
+    "limitation": "Markiert Serverkanäle als gelesen; keine Desktop-UI."
+  },
+  {
+    "id": "reviewDB",
+    "target": "bleelblep.review-db",
+    "adaptation": "Mobile ReviewDB-Profilintegration.",
+    "limitation": "Separater Drittanbieterdienst; seine Einstellungen und Datenverarbeitung beachten."
+  },
+  {
+    "id": "relationshipNotifier",
+    "target": "bleelblep.relationship-notifier",
+    "adaptation": "Mobile lokale Ereignisbenachrichtigungen.",
+    "limitation": "Auch weitere Profiländerungen möglich; nicht identische Desktop-Einstellungen."
+  },
+  {
+    "id": "shikiCodeblocks.desktop",
+    "target": "palmdevs.shiki-codeblocks",
+    "adaptation": "Native Codeblock-Darstellung mit Shiki.",
+    "limitation": "Android-Rendering statt VS Code/DOM-Integration."
+  },
+  {
+    "id": "showMeYourName",
+    "target": "bleelblep.show-tag",
+    "adaptation": "Mobile Namensanzeige.",
+    "limitation": "Benutzername neben Anzeigename; nicht alle Desktop-Nickname-Modi."
+  },
+  {
+    "id": "showTimeoutDuration",
+    "target": "palmdevs.show-timeout-duration",
+    "adaptation": "Mobile Timeout-Anzeige im Chat.",
+    "limitation": "Kein Desktop-Tooltip."
+  },
+  {
+    "id": "typingIndicator",
+    "target": "palmdevs.better-typing-indicators",
+    "adaptation": "Mobile Channel-Tippindikatoren.",
+    "limitation": "Zusätzliche Avatar- und Touch-Optionen."
+  },
+  {
+    "id": "whoReacted",
+    "target": "palmdevs.who-reacted",
+    "adaptation": "Mobile Reaktions-Avatare.",
+    "limitation": "Mobile Layout und Anzahl können abweichen."
+  },
+  {
+    "id": "customRPC",
+    "target": "dev.kmmiio99o.custom.rpc",
+    "adaptation": "Mobile Rich-Presence-Implementierung.",
+    "limitation": "Desktop-IPC und Einstellungen nicht übertragbar."
+  },
+  {
+    "id": "gifProviderSwitcher",
+    "target": "dev.benjii.gif-providers",
+    "adaptation": "Mobile GIF-Picker-Provider.",
+    "limitation": "Mehrere Anbieter; nicht derselbe Desktop-Switch."
+  },
+  {
+    "id": "userMessagesPronouns",
+    "target": "bleelblep.pronouns",
+    "adaptation": "Mobile Pronomenanzeige.",
+    "limitation": "Discord-Profil/PronounDB; externe Datenquelle möglich."
+  },
+  {
+    "id": "musicRichPresence",
+    "target": "bleelblep.multi-scrobbler",
+    "adaptation": "Mobile Musikstatus-Integration.",
+    "limitation": "Eigene Anbieter- und Music-Bridge-Konfiguration nötig."
+  }
+]

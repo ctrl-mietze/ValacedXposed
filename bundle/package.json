@@ -1,6 +1,6 @@
 {
   "name": "@valenced/bundle",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "module": "src/index.ts",
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

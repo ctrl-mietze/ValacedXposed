@@ -4,23 +4,36 @@ import android.content.Context
 import org.json.JSONObject
 import org.json.JSONArray
 
-/** Translation rules use stable, audited feature mappings rather than eval
- * of desktop code or blindly rewriting webpack patterns to Metro. */
+/** Source-derived IR adapters and separately labelled community equivalents.
+ * A full source-tree digest is required for activation, not only a filename. */
 internal object VencordTranslator {
-    data class Rule(val port:String,val adaptation:String,val limitation:String,val sourceHash:String)
-    val rules=mapOf(
-        "silentTyping" to Rule("veyra.port.no-typing","Flux: TYPING_START_LOCAL wird lokal unterdrückt.","Keine Desktop-Schaltfläche; der Port gilt bei Aktivierung dauerhaft.","406bbdc2f92d3303ede55b504e40f002420e193b1dd81352ccc8328c4d7cb27a"),
-        "characterCounter" to Rule("veyra.port.char-counter","Webpack-UI-Patch → Metro ChatInputCharCounter und React-Native-Text.","Mobile Darstellung; ein Discord-Neustart kann nötig sein.","b79783bcb4384a2d5fca086a870b9b3e7d563d1167ad4eff034cc27077fc9255"),
-        "clearURLs" to Rule("veyra.port.clean-urls","Desktop-Message-API → mobile Sende-/Editier-Hooks und Clipboard.","Unterstützt eine begrenzte Liste bekannter Tracking-Parameter. Signierte URLs bleiben unverändert.","8a34be79d0d1f7c20788d52f8f42009e738cb8322e20b707d85557a227792c9f"),
-        "imageLink" to Rule("veyra.port.image-links","Webpack-Renderpatch → Metro RowManager.generate.","Bild-/GIF-Embeds ohne Text; keine Änderung von Medienberechtigungen.","c0bfa770adadd938e2acb2aa22b0653bca46f9554aa0f9d26534103915fcad53"),
-        "alwaysAnimate" to Rule("veyra.port.animate","Desktop canAnimate-Patches → mobile Avatar- und Icon-URL-Auflösung.","Nur bereits animierte Discord-Avatare und Icons, keine vollständige Desktop-Funktion.","a307cd3ed85d67aeed3b353cabed6f2be8e1f8e4eb84c35d5987f6d9420e2a19"),
-    )
-    fun plan(id:String,hash:String):JSONObject{
+    data class Rule(val port:String,val adaptation:String,val limitation:String,val sourceHash:String,
+        val treeHash:String,val kind:String,val repo:String="",val version:String="",val artifactHash:String="")
+    val rules:Map<String,Rule> get()=VencordCompiledRules.all
+    fun plan(id:String,hash:String,treeHash:String?=null):JSONObject{
         val rule=rules[id]
-        if(rule==null||rule.sourceHash!=hash)return JSONObject().put("supported",false)
-            .put("reason",if(rule==null)"Kein verifizierter Mobile-Adapter vorhanden." else "Desktop-Quellcode hat sich geändert; Regel muss geprüft werden.")
-        return JSONObject().put("supported",true).put("target",rule.port)
+        if(rule==null||rule.sourceHash!=hash||(treeHash!=null&&rule.treeHash!=treeHash))
+            return JSONObject().put("supported",false).put("reason",if(rule==null)
+                "Kein geprüfter Mobile-Adapter. Details im AST-Quellbericht."
+                else "Desktop-Quellrevision stimmt nicht mit dem Compiler-Inventar überein.")
+        return JSONObject().put("supported",true).put("target",rule.port).put("mode",rule.kind)
             .put("adaptation",rule.adaptation).put("limitation",rule.limitation)
+            .put("repo",rule.repo).put("version",rule.version).put("artifactHash",rule.artifactHash)
+            .put("treeHash",rule.treeHash)
+    }
+    fun inventoryReport(item:JSONObject):JSONObject{
+        val ast=item.optJSONObject("analysis")?:JSONObject()
+        val r=JSONObject().put("id",item.optString("id")).put("name",item.optString("name"))
+            .put("declared",item.optString("description")).put("sourceBytes",ast.optInt("totalBytes"))
+            .put("files",item.optInt("files")).put("kind","vencord-inventory").put("isolated",false)
+            .put("native",item.optBoolean("native")).put("ast",ast).put("findings",JSONArray())
+            .put("test",JSONObject().put("status","AST-Quellinventar abgeschlossen")
+                .put("detail","Vollständige Quelldateien dieser gepinnten Revision wurden beim Erstellen des Katalogs untersucht. Kein Gerätelaufzeittest."))
+            .put("sourceCoverage","AST-Inventar: "+ast.optInt("codeFiles")+" Code-Dateien; "+item.optInt("files")+" Dateien insgesamt.")
+            .put("disclaimer","Statische Codeanalyse und Mobile-Plan sind kein Nachweis vollständiger Laufzeitkompatibilität.")
+        val plan=plan(item.optString("id"),item.optString("sha256"),item.optString("treeHash"))
+        if(!plan.optBoolean("supported"))plan.put("reason",item.optJSONObject("translation")?.optString("reason")?:plan.optString("reason"))
+        return r.put("translation",plan)
     }
     fun catalog(context:Context):JSONObject=context.assets.open("vencord-catalog.json").bufferedReader().use{JSONObject(it.readText())}
 }

@@ -1499,6 +1499,7 @@ class ValancedXActivity : Activity() {
     private var analysisLimit=60
     private var vencordQuery=""
     private var vencordLimit=60
+    private var vencordFilter=0
     private val vencordCatalog by lazy {
         runCatching{app.valenced.xposed.manager.analysis.VencordTranslator.catalog(this)}.getOrElse{JSONObject()}
     }
@@ -1532,9 +1533,37 @@ class ValancedXActivity : Activity() {
                 val evidence=f.optJSONArray("evidence")
                 if(evidence!=null)text.append("\nHinweise: ").append((0 until evidence.length()).joinToString(", "){evidence.optString(it)})
             }
+            r.optJSONObject("ast")?.let{ast->
+                fun values(key:String,limit:Int=20):String{
+                    val arr=ast.optJSONArray(key)?:return ""
+                    return (0 until minOf(arr.length(),limit)).joinToString(", "){arr.optString(it)}
+                }
+                text.append("\n\nAST-Analyse · ").append(ast.optInt("codeFiles")).append(" Code-Dateien")
+                text.append("\nWebpack-Patches: ").append(ast.optInt("patchCount")).append(" · Replacements: ").append(ast.optInt("replacements"))
+                val features=values("features")
+                if(features.isNotBlank())text.append("\nMerkmale: ").append(features)
+                for((label,key) in listOf("Imports" to "imports","Vencord-APIs" to "sharedApis","Plugin-Abhängigkeiten" to "dependencies",
+                    "Plugin-Imports" to "pluginImports","Lifecycle/API-Felder" to "fields","Flux-Ereignisse" to "events","Patchanker" to "patchAnchors")){
+                    val value=values(key)
+                    if(value.isNotBlank())text.append("\n").append(label).append(": ").append(value)
+                }
+                val settings=ast.optJSONArray("settings")
+                if(settings!=null&&settings.length()>0){
+                    text.append("\n\nDesktop-Einstellungen (").append(settings.length()).append(")")
+                    for(i in 0 until minOf(settings.length(),30)){
+                        val setting=settings.optJSONObject(i)?:continue
+                        text.append("\n").append(setting.optString("key")).append(" · ").append(setting.optString("type"))
+                        if(setting.has("default"))text.append(" · Standard: ").append(setting.opt("default").toString().take(100))
+                    }
+                }
+            }
             r.optJSONObject("translation")?.let{plan->
                 text.append("\n\nVencord → Mobile\n")
-                if(plan.optBoolean("supported"))text.append(plan.optString("adaptation")).append("\n").append(plan.optString("limitation"))
+                if(plan.optBoolean("supported")){
+                    text.append(when(plan.optString("mode")){"compiled"->"AST-kompilierter Port";"repository"->"Vorhandenes Android-Gegenstück";else->"Integrierter Mobile-Port"})
+                    text.append("\n").append(plan.optString("target")).append("\n").append(plan.optString("adaptation")).append("\n").append(plan.optString("limitation"))
+                    if(plan.optString("repo").isNotBlank())text.append("\nQuelle: ").append(plan.optString("repo")).append("\nGeprüfte Version: ").append(plan.optString("version"))
+                }
                 else text.append(plan.optString("reason"))
             }
             if(r.optBoolean("native"))text.append("\n\nNative Komponenten wurden nicht ausgeführt.")
@@ -1569,7 +1598,15 @@ class ValancedXActivity : Activity() {
             if(translate&&result!=null){
                 val plan=result.optJSONObject("translation")
                 if(!result.has("error")&&plan?.optBoolean("supported")==true){
-                    pluginAction("vencord_activate",JSONObject().put("id",queue.first().optString("id")).put("sha256",queue.first().optString("sha256")))
+                    val first=queue.first()
+                    val payload=JSONObject().put("id",first.optString("id")).put("sha256",first.optString("sha256"))
+                        .put("treeHash",result.optString("verifiedTreeHash"))
+                    if(plan.optString("mode")=="repository"){
+                        AlertDialog.Builder(this@ValancedXActivity).setTitle("Android-Gegenstück installieren und aktivieren?")
+                            .setMessage(plan.optString("target")+" · v"+plan.optString("version")+"\n"+plan.optString("repo")+"\n\n"+
+                                plan.optString("limitation")+"\n\nDas vorhandene Mobile-Plugin und erforderliche Abhängigkeiten werden aktiviert. Es ist kein neu übersetztes Desktop-Bundle.")
+                            .setNegativeButton("Abbrechen",null).setPositiveButton("Aktivieren"){_,_->pluginAction("vencord_activate",payload)}.show()
+                    }else pluginAction("vencord_activate",payload)
                 }else showAnalysis(queue.first(),result)
             }else if(show&&result!=null)showAnalysis(queue.first(),result)
         }
@@ -1630,15 +1667,30 @@ class ValancedXActivity : Activity() {
     private fun vencordScreen(parent:LinearLayout){
         eyebrow(parent,"VENCORD → MOBILE")
         val entries=analysisItems("vencord")
-        val supported=entries.count{app.valenced.xposed.manager.analysis.VencordTranslator.plan(it.optString("id"),it.optString("sha256")).optBoolean("supported")}
+        val summary=vencordCatalog.optJSONObject("summary")?:JSONObject()
+        val modes=summary.optJSONObject("modes")?:JSONObject()
+        val supported=modes.optInt("compiled")+modes.optInt("bundled")+modes.optInt("repository")
         card(parent,top=8){
-            add(this,label("Plugin Translator",23f,whiteColor,true))
-            add(this,label(entries.size.toString()+" Desktop-Plugins · "+supported+" vorbereitete Mobile-Regeln",13f,mintColor),top=5)
-            add(this,label("Beim Aktivieren wird der gepinnte Vencord-Quellcode lokal geprüft und eine passende integrierte Mobile-Implementierung ausgewählt. Unbekannte Webpack-, CSS- und Node-Hooks werden nicht blind ausgeführt.",12f,mutedColor),top=6)
-            add(this,label("Revision: "+vencordCatalog.optString("revision").take(12),10f,mutedColor),top=6)
+            add(this,label("Vencord Compiler",23f,whiteColor,true))
+            add(this,label(entries.size.toString()+" Plugins · "+summary.optInt("files")+" Dateien untersucht",13f,mintColor),top=5)
+            add(this,label(modes.optInt("compiled").toString()+" AST-kompilierte Ports · "+modes.optInt("bundled")+" integrierte · "+modes.optInt("repository")+" Android-Gegenstücke",12f,accentColor),top=5)
+            add(this,label("Vollständige Quellberichte offline. Beim Aktivieren wird der gesamte Plugin-Quellbaum per SHA-256 geprüft. Der Compiler verwendet ausschließlich geprüfte Mobile-Operationen; Desktop-Hooks werden nicht direkt ausgeführt.",12f,mutedColor),top=6)
+            add(this,label("Revision: "+vencordCatalog.optString("revision").take(12)+" · "+summary.optInt("internalDefinitions")+" interne API-Komponenten",10f,mutedColor),top=6)
             analysisLabel=label(analysisNote,11f,accentColor);add(this,analysisLabel!!,top=5)
             if(analysisJob?.isActive==true)add(this,button("Analyse stoppen"){analysisJob?.cancel();render(preserveScroll=true)},top=7)
+            else twoActions(this,button("Alle lokal prüfen",true){
+                AlertDialog.Builder(this@ValancedXActivity).setTitle("Alle "+entries.size+" Plugin-Quellbäume prüfen?")
+                    .setMessage("Alle gepinnten Dateien werden heruntergeladen, verifiziert und pro Plugin getrennt statisch untersucht. Kein Plugin wird aktiviert.")
+                    .setNegativeButton("Abbrechen",null).setPositiveButton("Starten"){_,_->startAnalysis(entries,"vencord")}.show()
+            },button("API-Inventar"){
+                val internal=vencordCatalog.optJSONArray("internal")?:JSONArray()
+                val message=(0 until internal.length()).mapNotNull{internal.optJSONObject(it)}.joinToString("\n\n"){
+                    it.optString("name")+" · "+it.optInt("codeFiles")+" Code-Dateien\n"+(it.optJSONArray("features")?.let{arr->(0 until arr.length()).joinToString(", "){i->arr.optString(i)}}?:"")
+                }
+                AlertDialog.Builder(this@ValancedXActivity).setTitle("Interne Vencord-APIs").setMessage(message).setPositiveButton("Schließen",null).show()
+            })
         }
+        segmented(parent,listOf("Alle","Mobile ("+supported+")","Manuell"),vencordFilter,{i->vencordFilter=i;vencordLimit=60;render(preserveScroll=true)})
         val search=EditText(this).apply{hint="Vencord-Plugin suchen …";setText(vencordQuery);setTextColor(whiteColor);setHintTextColor(mutedColor);setSingleLine(true);background=rounded(surfaceColor,borderColor,14);setPadding(dp(12),dp(10),dp(12),dp(10))}
         add(parent,search,top=10)
         val list=column();add(parent,list,top=5)
@@ -1646,29 +1698,42 @@ class ValancedXActivity : Activity() {
         fun draw(){
             list.removeAllViews()
             val matching=entries.filter{it.optString("name").contains(vencordQuery,true)||it.optString("id").contains(vencordQuery,true)}
-                .sortedWith(compareByDescending<JSONObject>{app.valenced.xposed.manager.analysis.VencordTranslator.rules.containsKey(it.optString("id"))}.thenBy{it.optString("name").lowercase(Locale.ROOT)})
+                .filter{val ready=app.valenced.xposed.manager.analysis.VencordTranslator.rules.containsKey(it.optString("id"))
+                    vencordFilter==0||(vencordFilter==1&&ready)||(vencordFilter==2&&!ready)}
+                .sortedWith(compareByDescending<JSONObject>{app.valenced.xposed.manager.analysis.VencordTranslator.rules[it.optString("id")]?.kind=="compiled"}
+                    .thenByDescending{app.valenced.xposed.manager.analysis.VencordTranslator.rules.containsKey(it.optString("id"))}.thenBy{it.optString("name").lowercase(Locale.ROOT)})
+            eyebrow(list,matching.size.toString()+" PLUGINS")
             for(item in matching.take(vencordLimit))card(list,top=8){
                 val id=item.optString("id")
-                val plan=app.valenced.xposed.manager.analysis.VencordTranslator.plan(id,item.optString("sha256"))
+                val plan=app.valenced.xposed.manager.analysis.VencordTranslator.plan(id,item.optString("sha256"),item.optString("treeHash"))
                 val ready=plan.optBoolean("supported")
                 val target=plan.optString("target")
                 val active=ready&&installed.any{it.optString("id")==target&&it.optBoolean("enabled")}
+                val mode=plan.optString("mode")
                 tag="vx-vencord-"+id
                 add(this,label(item.optString("name"),16f,whiteColor,true))
                 add(this,label(item.optString("description"),12f,mutedColor),top=4)
-                add(this,label(if(active)"Mobile-Port aktiviert" else if(ready)"Übersetzungsregel verfügbar" else "Manueller Port erforderlich",11f,if(ready)mintColor else warmColor),top=5)
+                add(this,label(if(active)"Mobile-Port aktiviert" else if(mode=="compiled")"AST-kompilierter Mobile-Port"
+                    else if(mode=="repository")"Android-Gegenstück · geprüfte ZIP" else if(ready)"Integrierter Mobile-Port" else "Manueller Port erforderlich",11f,if(ready)mintColor else warmColor),top=5)
+                val ast=item.optJSONObject("analysis")?:JSONObject()
+                add(this,label(ast.optInt("codeFiles").toString()+" Code-Dateien · "+ast.optInt("patchCount")+" Webpack-Patches · "+(ast.optJSONArray("sharedApis")?.length()?:0)+" Vencord-APIs",11f,mutedColor),top=4)
                 if(ready){
                     add(this,label(plan.optString("adaptation"),12f,whiteColor),top=6)
                     add(this,label(plan.optString("limitation"),11f,mutedColor),top=4)
-                    add(this,button(if(active)"Mobile-Port deaktivieren" else "Übersetzen & aktivieren",!active){
+                    if(mode=="repository")add(this,label("Mobile: "+target+" · v"+plan.optString("version")+"\n"+Uri.parse(plan.optString("repo")).host.orEmpty(),11f,mutedColor),top=5)
+                    add(this,button(if(active)"Mobile-Port deaktivieren" else if(mode=="repository")"Mobile-Gegenstück aktivieren" else "Übersetzen & aktivieren",!active){
                         if(active)pluginAction("vencord_disable",JSONObject().put("id",id))
                         else startAnalysis(listOf(item),"vencord",translate=true)
                     },top=7)
                 }else{
-                    val flags=listOfNotNull(if(item.optBoolean("native"))"Node.js" else null,if(item.optBoolean("css"))"CSS" else null,if(item.optBoolean("patches"))"Webpack-Patches" else null)
-                    if(flags.isNotEmpty())add(this,label(flags.joinToString(" · "),11f,mutedColor),top=4)
+                    add(this,label(item.optJSONObject("translation")?.optString("reason").orEmpty().take(350),11f,mutedColor),top=6)
                 }
-                analysisEntry(this,item,"vencord")
+                val report=analyzer.report(item,"vencord")
+                twoActions(this,button("Quellbericht"){showAnalysis(item,app.valenced.xposed.manager.analysis.VencordTranslator.inventoryReport(item))},
+                    button(if(report==null)"Lokal prüfen" else "Lokaler Bericht"){
+                        if(report==null)startAnalysis(listOf(item),"vencord",show=true) else showAnalysis(item,report)
+                    },top=8)
+                if(report!=null)add(this,button("Erneut lokal prüfen"){startAnalysis(listOf(item),"vencord",show=true)},top=5)
             }
             if(matching.size>vencordLimit)add(list,button("Weitere anzeigen"){vencordLimit+=60;draw()},top=8)
         }

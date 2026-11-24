@@ -18,7 +18,7 @@ import java.io.File
 
 internal class PluginAnalyzer(private val context:Context,private val signal:()->Unit){
     private val reportsDir=File(context.filesDir,"plugin-analysis").apply{mkdirs()}
-    fun key(item:JSONObject,kind:String):String=sha256Hex(BuildConfig.VERSION_CODE.toString()+"|"+kind+"|"+item.optString("id")+"|"+item.optString("repo")+"|"+item.optString("version")+"|"+item.optString("artifactSha256")+"|"+item.optString("sha256"))
+    fun key(item:JSONObject,kind:String):String=sha256Hex(BuildConfig.VERSION_CODE.toString()+"|"+kind+"|"+item.optString("id")+"|"+item.optString("repo")+"|"+item.optString("version")+"|"+item.optString("artifactSha256")+"|"+item.optString("sha256")+"|"+item.optString("treeHash"))
     fun report(item:JSONObject,kind:String):JSONObject?=runCatching{JSONObject(File(reportsDir,key(item,kind)+".json").readText())}.getOrNull()
     private fun save(item:JSONObject,kind:String,result:JSONObject){
         result.put("timestamp",System.currentTimeMillis())
@@ -77,6 +77,7 @@ internal class PluginAnalyzer(private val context:Context,private val signal:()-
         val result=try{
             val meta=JSONObject().put("name",item.optString("name")).put("id",item.optString("id"))
                 .put("description",item.optString("description"))
+            var verifiedTree:String?=null
             val bytes=when(kind){
                 "catalog"->{
                     meta.put("kind","zip")
@@ -84,10 +85,39 @@ internal class PluginAnalyzer(private val context:Context,private val signal:()-
                 }
                 "vencord"->{
                     val revision=VencordTranslator.catalog(context).getString("revision")
-                    val path=item.getString("path")
-                    require(revision.matches(Regex("[a-f0-9]{40}"))&&path.matches(Regex("src/plugins/[a-zA-Z0-9._-]+/index\\.tsx?"))){"Ungültiger Vencord-Quellpfad."}
-                    meta.put("kind","typescript").put("native",item.optBoolean("native")).put("files",item.optInt("files",1))
-                    fetch("https://raw.githubusercontent.com/Vendicated/Vencord/$revision/$path",item.getLong("size"),item.getString("sha256"))
+                    val id=item.getString("id")
+                    require(revision.matches(Regex("[a-f0-9]{40}"))&&id.matches(Regex("[a-zA-Z0-9._-]+"))){"Ungültige Vencord-Revision."}
+                    val fileList=item.getJSONArray("sourceFiles")
+                    require(fileList.length() in 1..128)
+                    val records=(0 until fileList.length()).map{fileList.getJSONObject(it)}.sortedBy{it.getString("path")}
+                    val tree=StringBuilder()
+                    val source=ByteArrayOutputStream()
+                    var total=0L
+                    var entryVerified=false
+                    for(record in records){
+                        val path=record.getString("path")
+                        require(path.startsWith("src/plugins/"+id+"/")&&path.split('/').all{it.isNotBlank()&&it!=".."&&it!="."&&it.matches(Regex("[A-Za-z0-9._ -]+"))}){"Ungültiger Vencord-Dateipfad."}
+                        val size=record.getLong("size")
+                        total+=size;require(total<=2_000_000L){"Vencord-Quellbestand zu groß."}
+                        val hash=record.getString("sha256")
+                        val url="https://raw.githubusercontent.com/Vendicated/Vencord/"+revision+"/"+path.split('/').joinToString("/"){android.net.Uri.encode(it)}
+                        val file=fetch(url,size,hash)
+                        tree.append(path).append('\u0000').append(sha256Hex(file)).append('\n')
+                        if(path==item.getString("path")){
+                            require(hash==item.getString("sha256")){"Einstiegspunkt hat falsche Prüfsumme."}
+                            entryVerified=true
+                        }
+                        // All files are hash-checked, but only source and CSS are
+                        // forwarded to the isolated static analysis process.
+                        if(path.endsWith(".ts")||path.endsWith(".tsx")||path.endsWith(".js")||path.endsWith(".jsx")||path.endsWith(".css")){
+                            source.write(("\n// "+path+"\n").encodeToByteArray());source.write(file)
+                        }
+                    }
+                    require(entryVerified)
+                    verifiedTree=sha256Hex(tree.toString())
+                    require(verifiedTree==item.getString("treeHash")){"Vencord-Quellbaum stimmt nicht mit dem Inventar überein."}
+                    meta.put("kind","typescript").put("native",item.optBoolean("native")).put("files",fileList.length())
+                    source.toByteArray()
                 }
                 else->{
                     val prepared=ipc("analysis_prepare",JSONObject().put("id",item.getString("id"))).getJSONObject("analysisInput")
@@ -111,8 +141,11 @@ internal class PluginAnalyzer(private val context:Context,private val signal:()-
             }
             val r=SandboxClient.run(context,bytes,meta)
             if(kind=="vencord"&&!r.has("error")){
-                r.put("translation",VencordTranslator.plan(item.optString("id"),sha256Hex(bytes)))
-                r.put("sourceCoverage","Einstiegspunkt index.ts(x); weitere Desktop-Dateien werden nicht dynamisch ausgeführt.")
+                val tree=checkNotNull(verifiedTree)
+                val plan=VencordTranslator.plan(item.optString("id"),item.optString("sha256"),tree)
+                if(!plan.optBoolean("supported"))plan.put("reason",item.optJSONObject("translation")?.optString("reason")?:plan.optString("reason"))
+                r.put("translation",plan).put("verifiedTreeHash",tree).put("ast",item.optJSONObject("analysis"))
+                r.put("sourceCoverage","Alle "+item.optInt("files")+" Dateien per SHA-256 geprüft. Code und CSS statisch im isolierten Prozess untersucht; kein Desktop-Code in Discord ausgeführt.")
             }
             r
         }catch(e:kotlinx.coroutines.TimeoutCancellationException){JSONObject().put("error","Sandbox oder Discord-Export hat das Zeitlimit erreicht.")}

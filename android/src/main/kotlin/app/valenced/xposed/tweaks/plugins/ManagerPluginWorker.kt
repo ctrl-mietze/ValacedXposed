@@ -22,6 +22,7 @@ import app.valenced.xposed.ETagFetchResult
 import app.valenced.plugins.repos.parseRepoIndex
 import app.valenced.plugins.repos.sha256Hex
 import app.valenced.xposed.manager.analysis.VencordTranslator
+import app.valenced.xposed.manager.analysis.VencordCompiledRules
 import app.valenced.xposed.manager.HookPolicy
 import app.valenced.xposed.manager.HookMode
 import app.valenced.xposed.manager.ModuleSettings
@@ -242,6 +243,81 @@ internal object ManagerPluginWorker {
             .put("available", available).put("installed", installed)
     }
 
+    /** The selected native equivalent is a real repository plugin, not
+     * relabelled Desktop JS. Its root artifact is pinned to the reviewed ZIP.
+     * Required libraries are resolved by the normal install dependency graph. */
+    private suspend fun activateVencordRepository(rule:VencordTranslator.Rule){
+        require(RepoStore.list().any{it.url==rule.repo&&it.enabled}){"Die zugeordnete Plugin-Quelle ist nicht aktiv: "+rule.repo}
+        val root=RepoStore.cachedIndex(rule.repo)?.plugins?.get(rule.port)
+            ?:error("Mobile-Gegenstück fehlt im Quellindex. Quellen synchronisieren.")
+        val artifact=root.versions[rule.version]?:error("Geprüfte Mobile-Version nicht mehr im Index. Compiler-Inventar aktualisieren.")
+        require(artifact.sha256==rule.artifactHash){"Mobile-Artefakt wurde geändert; erneut prüfen."}
+        // Never replace an existing installation with a different artifact
+        // through the translator. Normal plugin update UI remains available.
+        val installed=pluginRegistry.factories[rule.port]
+        if(installed!=null){
+            require(installed.manifest.version.toString()==rule.version&&SourcesStore[rule.port]?.hash==rule.artifactHash) {
+                "Andere Mobile-Version bereits installiert. Im Plugin Manager prüfen."
+            }
+        }else{
+            val progress=kotlin.coroutines.coroutineContext[ManagerPluginProgress]
+            progress?.report?.invoke("Mobile-Abhängigkeiten prüfen",-1)
+            val plan=invoke("planInstall",rule.port,
+                mapOf("targets" to mapOf(rule.port to mapOf("repo" to rule.repo,"compatible" to true)),
+                    "skipMissingOptionals" to true)) as? Map<*,*> ?: error("Ungültiger Installationsplan.")
+            val blockers=(plan["warnings"] as? List<*>).orEmpty().mapNotNull{it as? Map<*,*>}
+                .filter{it["type"] in setOf("downgrade","breaks","conflict")||(it["type"]=="unresolved"&&it["optional"]!=true)}
+            require(blockers.isEmpty()){blockers.joinToString("\n"){it["message"].toString()}}
+            val actions=(plan["actions"] as? List<*>).orEmpty().mapNotNull{it as? Map<*,*>}
+            val main=actions.firstOrNull{it["id"]==rule.port}?:error("Mobile-Hauptpaket fehlt im Installationsplan.")
+            require(main["repo"]==rule.repo&&main["version"]==rule.version&&main["sha256"]==rule.artifactHash){"Resolver wählte eine ungeprüfte Mobile-Version."}
+            for(action in actions){
+                require(action["url"].toString().startsWith("https://")){"Nur HTTPS-Plugin-Dateien."}
+                val actionId=action["id"].toString()
+                require(pluginRegistry.factories[actionId]==null){"Vorhandene Abhängigkeit müsste geändert werden: "+actionId+". Bitte separat aktualisieren."}
+                if(actionId!=rule.port){
+                    val pin=VencordCompiledRules.dependencyPins[actionId]?:error("Nicht geprüfte Mobile-Abhängigkeit: "+actionId)
+                    require(action["repo"]==pin.repo&&action["version"]==pin.version&&action["sha256"]==pin.hash){"Abhängigkeit hat sich geändert: "+actionId}
+                }
+            }
+            progress?.report?.invoke("Mobile-Port installieren",0)
+            invoke("install",plan)
+        }
+        val graph=pluginRegistry.dependencies
+        val order=mutableListOf<String>()
+        val visiting=mutableSetOf<String>()
+        val done=mutableSetOf<String>()
+        fun visit(id:String){
+            if(id in done)return
+            check(visiting.add(id)){"Zyklische Mobile-Abhängigkeit: "+id}
+            require(pluginRegistry.factories.containsKey(id)){"Mobile-Abhängigkeit fehlt: "+id}
+            require(id !in pluginRegistry.pendingUpdates){"Discord-Neustart für Abhängigkeit nötig: "+id}
+            if(id!=rule.port&&id !in setOf("valenced.api","discord")){
+                val pin=VencordCompiledRules.dependencyPins[id]?:error("Nicht geprüfte Mobile-Abhängigkeit: "+id)
+                require(pluginRegistry.factories[id]?.manifest?.version?.toString()==pin.version&&SourcesStore[id]?.hash==pin.hash){"Andere Abhängigkeitsversion installiert: "+id}
+            }
+            for(dep in graph.requiredDependencies(id)){
+                graph.problem(id,dep)?.let{error(it.reason)}
+                visit(dep)
+            }
+            visiting.remove(id);done.add(id);order.add(id)
+        }
+        visit(rule.port)
+        val changed=mutableListOf<String>()
+        try{
+            for(id in order){
+                val flags=pluginRegistry.factories[id]?.internalFlags.orEmpty()
+                if(InternalPluginFlags.ESSENTIAL in flags||PluginStatesStore.active.isPluginEnabled(id)||
+                    (!PluginStatesStore.active.hasPlugin(id)&&InternalPluginFlags.ENABLED_BY_DEFAULT in flags))continue
+                invoke("setEnabled",id,true,id==rule.port)
+                changed.add(id)
+            }
+        }catch(e:Throwable){
+            for(id in changed.asReversed())runCatching{invoke("setEnabled",id,false,false)}
+            throw e
+        }
+    }
+
     private suspend fun handle(context: Context, op: String, data: JSONObject): JSONObject {
         // Seed the same official community source once, respecting any later
         // explicit removal. Third-party sources are always opt-in.
@@ -264,13 +340,19 @@ internal object ManagerPluginWorker {
                 val id=data.getString("id")
                 val rule=VencordTranslator.rules[id]?:error("Kein Mobile-Adapter vorhanden.")
                 if(op=="vencord_activate"){
-                    require(data.optString("sha256")==rule.sourceHash){"Vencord-Quellrevision nicht unterstützt."}
-                    require(pluginRegistry.factories.containsKey(rule.port)){"Mobile-Port fehlt."}
+                    require(data.optString("sha256")==rule.sourceHash&&data.optString("treeHash")==rule.treeHash){"Vencord-Quellbaum nicht unterstützt."}
                     conflictingPort(rule.port)?.let{error("Gleichartiges Plugin aktiv: "+it+". Zuerst deaktivieren.")}
-                    if(!legacyEnabled())invoke("setEnabled","veyra.legacy.compat",true,true)
-                    invoke("setEnabled",rule.port,true,true)
-                    return snapshot("Vencord-Mobile-Port aktiviert. Falls nötig Discord neu starten.")
+                    if(rule.kind=="repository"){
+                        activateVencordRepository(rule)
+                    }else{
+                        require(pluginRegistry.factories.containsKey(rule.port)){"Mobile-Port fehlt."}
+                        if(rule.kind=="bundled"&&!legacyEnabled())invoke("setEnabled","veyra.legacy.compat",true,true)
+                        invoke("setEnabled",rule.port,true,true)
+                    }
+                    return snapshot(if(rule.kind=="repository")"Mobile-Gegenstück aktiviert. Falls nötig Discord neu starten."
+                        else "Mobile-Adapter aktiviert. Falls nötig Discord neu starten.")
                 }
+                require(pluginRegistry.factories.containsKey(rule.port)){"Mobile-Port nicht installiert."}
                 invoke("setEnabled",rule.port,false,false)
                 return snapshot("Vencord-Mobile-Port deaktiviert.")
             }

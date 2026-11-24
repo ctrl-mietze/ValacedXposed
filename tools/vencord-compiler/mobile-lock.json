@@ -1,0 +1,264 @@
+{
+  "available": [
+    {
+      "id": "wolfie.add-attachments",
+      "name": "Add Attachments",
+      "description": "Add new attachments when editing messages.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/wolfie.add-attachments@1.0.0.zip",
+      "artifactSize": 2384,
+      "artifactSha256": "aa60a429c78c57fb1135cdd42c141c34577f60e9a32e2d8ddbf73ba21db29d77"
+    },
+    {
+      "id": "k1ngop.anonymous-file-names",
+      "name": "Anonymous File Names",
+      "description": "Randomizes file names before you upload them.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/k1ngop.anonymous-file-names@1.0.0.zip",
+      "artifactSize": 1773,
+      "artifactSha256": "460d8d3f81552299a46f8da13b28d0be358f15d9942bc58135aa5bd4ad4b5584"
+    },
+    {
+      "id": "thororen.nsfw-blur",
+      "name": "NSFW Blur",
+      "description": "Blur images and disable embed media in NSFW channels.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/thororen.nsfw-blur@1.0.0.zip",
+      "artifactSize": 927,
+      "artifactSha256": "151e24b96908a7d2590190030a356dfba5904ef39423765213b0996b597cb34b"
+    },
+    {
+      "id": "dev.kmmiio99o.custom.rpc",
+      "name": "Custom RPC",
+      "description": "Set a fully custom Rich Presence activity on your profile.",
+      "repo": "https://kmmiio99o.github.io/valenced-plugins/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://kmmiio99o.github.io/valenced-plugins/pool/dev.kmmiio99o.custom.rpc@1.0.0.zip",
+      "artifactSize": 12605,
+      "artifactSha256": "626f97ed80b2950d31ae648b2d7773fa194195161933539d7f735557a8fd04cc"
+    },
+    {
+      "id": "k1ngop.disable-call-idle",
+      "name": "Disable Call Idle",
+      "description": "Stop getting kicked from empty voice calls after 3 minutes.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/k1ngop.disable-call-idle@1.0.0.zip",
+      "artifactSize": 729,
+      "artifactSha256": "268f8cd5558a5e05f713aa742a82301389cf43e95c7b73f61859c8dae66187d8"
+    },
+    {
+      "id": "hakuxyz.force-owner-crown",
+      "name": "Force Owner Crown",
+      "description": "Shows the owner crown next to usernames, even in large servers.",
+      "repo": "https://hakuxyz.github.io/valenced-plugins/index.json",
+      "version": "1.0.1",
+      "artifactUrl": "https://hakuxyz.github.io/valenced-plugins/hakuxyz.force-owner-crown@1.0.1.zip",
+      "artifactSize": 2923,
+      "artifactSha256": "7f99e6d65584e22b759e5d07f6f1b5cbabcf81b16ef97fe51140ac5a002547fc"
+    },
+    {
+      "id": "dev.benjii.gif-providers",
+      "name": "GIF Providers",
+      "description": "Search Tenor, Giphy and Klipy together in the GIF picker.",
+      "repo": "https://plugins.benjiisworld.com/index.json",
+      "version": "1.0.2",
+      "artifactUrl": "https://plugins.benjiisworld.com/pool/dev.benjii.gif-providers@1.0.2.zip",
+      "artifactSize": 22485,
+      "artifactSha256": "cf71f94cd174866e9cf006eebfb10bf05b9ea39bebb6b088dc7cd79a6edfcc1e"
+    },
+    {
+      "id": "dev.tralwdwdd.jump-to-top",
+      "name": "Jump To Top",
+      "description": "Adds a button to jump to the first message in a chat.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/dev.tralwdwdd.jump-to-top@1.0.0.zip",
+      "artifactSize": 1684,
+      "artifactSha256": "829f5308a842fe09cf7f8690995551a5475fc61b93dff1563de1465032346941"
+    },
+    {
+      "id": "palmdevs.mention-avatars",
+      "name": "Mention Avatars",
+      "description": "Avatars in user mentions, role icons in role mentions, and group icons in group DM links.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/palmdevs.mention-avatars@1.0.0.zip",
+      "artifactSize": 13739,
+      "artifactSha256": "e42f44b6e5fe7daf5c8c45f6283f29158a3fc073e6174e237d94fe42bfb4c128"
+    },
+    {
+      "id": "palmdevs.message-link-preview",
+      "name": "Message Link Preview",
+      "description": "Preview and interact with messages that you've got linked to.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/palmdevs.message-link-preview@1.0.0.zip",
+      "artifactSize": 33402,
+      "artifactSha256": "b31cf18cece202deeefb14059b01448de22f4168dc074a91c034ce626a092318"
+    },
+    {
+      "id": "bleelblep.multi-scrobbler",
+      "name": "Multi Scrobbler",
+      "description": "Shows what you're playing as your Discord status: from Last.fm, Libre.fm, ListenBrainz, or this phone's music player through the Music Bridge app.",
+      "repo": "https://bleelblep.github.io/bleel-bazinga-repo/index.json",
+      "version": "1.4.0",
+      "artifactUrl": "https://bleelblep.github.io/bleel-bazinga-repo/pool/bleelblep.multi-scrobbler@1.4.0.zip",
+      "artifactSize": 32092,
+      "artifactSha256": "9e168ae4ff38e595259e160dacd96881a03c63d5c41219632d4314fbe258347d"
+    },
+    {
+      "id": "palmdevs.hide-blocked-messages",
+      "name": "Hide Blocked Messages",
+      "description": "Hides messages from blocked or ignored users, and optionally removes replies to them.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/palmdevs.hide-blocked-messages@1.0.0.zip",
+      "artifactSize": 1422,
+      "artifactSha256": "89d47806cae93ad66283314afe54048abf02dee606c53f44fb10ea4b1b9bfbed"
+    },
+    {
+      "id": "dxckie.no-mosaic",
+      "name": "NoMosaic",
+      "description": "Shows message images and videos one under another instead of in a grid.",
+      "repo": "https://dxckie-cell.github.io/valenced-plugins/index.json",
+      "version": "1.5.1",
+      "artifactUrl": "https://dxckie-cell.github.io/valenced-plugins/pool/dxckie.no-mosaic@1.5.1.zip",
+      "artifactSize": 1492,
+      "artifactSha256": "566638b8541369ad92fd8e37f2bb21a3afd1b66ae0b1c6ad49d36e23f810acc2"
+    },
+    {
+      "id": "hakuxyz.oneko",
+      "name": "Oneko",
+      "description": "A little cat with selectable skins that chases your touches around the app.",
+      "repo": "https://hakuxyz.github.io/valenced-plugins/index.json",
+      "version": "1.0.3",
+      "artifactUrl": "https://hakuxyz.github.io/valenced-plugins/hakuxyz.oneko@1.0.3.zip",
+      "artifactSize": 356622,
+      "artifactSha256": "a8438eec9542be9f0640d35e00f211453a3bf105fb1b3642ef71b78bae4d297c"
+    },
+    {
+      "id": "dev.cocobo1.petpet",
+      "name": "PetPet",
+      "description": "pet anyone with /petpet",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.2",
+      "artifactUrl": "https://community.valenced.app/pool/dev.cocobo1.petpet@1.0.2.zip",
+      "artifactSize": 2085,
+      "artifactSha256": "03b425ee6ee8174a5d41c584442cd7459cc123ff613136f1e385fa33779c8db7"
+    },
+    {
+      "id": "dev.nexza.read-all-notifications",
+      "name": "Read All Notifications",
+      "description": "Mark unread server channels as read with a button under your DMs in the server list.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.1",
+      "artifactUrl": "https://community.valenced.app/pool/dev.nexza.read-all-notifications@1.0.1.zip",
+      "artifactSize": 2622,
+      "artifactSha256": "3744388a0e7d43ca5dccd2e3271684daca0799003337202ca3376c354c5dfcea"
+    },
+    {
+      "id": "bleelblep.relationship-notifier",
+      "name": "Relationship Notifier",
+      "description": "Tells you about lost and new friends, lost servers and group DMs, and friends' new names and avatars.",
+      "repo": "https://bleelblep.github.io/bleel-bazinga-repo/index.json",
+      "version": "2.2.0",
+      "artifactUrl": "https://bleelblep.github.io/bleel-bazinga-repo/pool/bleelblep.relationship-notifier@2.2.0.zip",
+      "artifactSize": 13026,
+      "artifactSha256": "8a4ee56c162f760fb3c21390446cb09a14b37f33aa792259039e1c7d32dca417"
+    },
+    {
+      "id": "bleelblep.review-db",
+      "name": "ReviewDB",
+      "description": "Read and write reviews on user profiles and servers, from ReviewDB.",
+      "repo": "https://bleelblep.github.io/bleel-bazinga-repo/index.json",
+      "version": "0.1.28",
+      "artifactUrl": "https://bleelblep.github.io/bleel-bazinga-repo/pool/bleelblep.review-db@0.1.28.zip",
+      "artifactSize": 18018,
+      "artifactSha256": "deba5eff3cf9dcbcc4c2174c9f46eded706152da880345327fae4e6196fb4136"
+    },
+    {
+      "id": "palmdevs.shiki-codeblocks",
+      "name": "Shiki Codeblocks",
+      "description": "Highlighted and selectable code blocks in chat with Shiki and custom themes.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/palmdevs.shiki-codeblocks@1.0.0.zip",
+      "artifactSize": 749481,
+      "artifactSha256": "0ef68a62eaa343e4226a648fd58615068c5b957c54b67fc47d4b4a521129b1d3"
+    },
+    {
+      "id": "bleelblep.show-tag",
+      "name": "Show Tag",
+      "description": "Show usernames next to display names in chat, including in replies.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/bleelblep.show-tag@1.0.0.zip",
+      "artifactSize": 1434,
+      "artifactSha256": "1721388c15c56ba4169c1a527377e37be0f5f6188ced083fc153f5fe6c55b3bb"
+    },
+    {
+      "id": "palmdevs.show-timeout-duration",
+      "name": "Show Timeout Duration",
+      "description": "Show remaining timeout duration above usernames in chat.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/palmdevs.show-timeout-duration@1.0.0.zip",
+      "artifactSize": 21017,
+      "artifactSha256": "071e8abe561874fea3ed683e4e5a7bf3e4fac2bc5fa032e99c218d6bb0e03e6f"
+    },
+    {
+      "id": "palmdevs.better-typing-indicators",
+      "name": "Better Typing Indicators",
+      "description": "Typing indicator in channels, with user avatars, tap to open profile, and more.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/palmdevs.better-typing-indicators@1.0.0.zip",
+      "artifactSize": 14869,
+      "artifactSha256": "06cb8f7a6858e162320e3f11b1dfe4442a574daedc0d6c7130f0667f557b0b7e"
+    },
+    {
+      "id": "bleelblep.pronouns",
+      "name": "Pronouns",
+      "description": "People's pronouns as a small tag next to their name in chat, from Discord profiles and PronounDB.",
+      "repo": "https://bleelblep.github.io/bleel-bazinga-repo/index.json",
+      "version": "1.0.9",
+      "artifactUrl": "https://bleelblep.github.io/bleel-bazinga-repo/pool/bleelblep.pronouns@1.0.9.zip",
+      "artifactSize": 22796,
+      "artifactSha256": "ddef8ca162ad9bfb9f2ee1486351908f2d7af56d692e371920e8f75297fad475"
+    },
+    {
+      "id": "palmdevs.who-reacted",
+      "name": "Who Reacted",
+      "description": "Shows the avatars of up to 5 people who reacted on each reaction in chat.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/palmdevs.who-reacted@1.0.0.zip",
+      "artifactSize": 28127,
+      "artifactSha256": "85ae8d292b969e93bd4c517b26d2b657889e933fbee18ff24ffbacfaf64e12da"
+    },
+    {
+      "id": "dev.tralwdwd.action-sheet-patcher",
+      "name": "tralwdwd's action sheet patcher library",
+      "description": "Provides a library to easily patch action sheets.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/dev.tralwdwd.action-sheet-patcher@1.0.0.zip",
+      "artifactSize": 1229,
+      "artifactSha256": "77fa3a215c730e2b16465c0a5cf3f6682bd8071f4d45d3ee2039b6cce4bcc136"
+    },
+    {
+      "id": "dev.cocobo1.command-lib",
+      "name": "Coco's Command Lib",
+      "description": "Provides a library to make making commands easier",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "2.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/dev.cocobo1.command-lib@2.0.0.zip",
+      "artifactSize": 2900,
+      "artifactSha256": "90bcadc76fa4e38257d688868875fd3ab3054c2857069735b2455c62c29a23f8"
+    }
+  ]
+}
