@@ -10,7 +10,7 @@ Revision: ce9355e9a93e369c7295fa162ad563f7f97b1ff7
 - codeFiles: 308
 - parseErrors: 0
 - bytes: 1461719
-- modes: {"compiled":2,"bundled":5,"repository":24,"manual":136}
+- modes: {"compiled":5,"bundled":5,"repository":24,"manual":133}
 - features: {"Auth-API":10,"CSS":49,"Commands":5,"ContextMenu":22,"DOM/Browser":32,"Desktop-Native":13,"Dynamischer Code":1,"Flux":42,"JSX/React":85,"MessageEvents":6,"Modulsuche":39,"Nachrichtenaktionen":3,"Netzwerk":26,"Node/Electron":7,"Settings":99,"UI-Hooks":51,"Vencord-API":119,"Webpack":115,"Webpack-Patches":129}
 
 ## Plugin-Matrix
@@ -136,7 +136,7 @@ Revision: ce9355e9a93e369c7295fa162ad563f7f97b1ff7
 | ReviewDB | 13 | 3 | repository · bleelblep.review-db |
 | RoleColorEverywhere | 1 | 8 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
 | SecretRingToneEnabler | 1 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
-| SendTimestamps | 2 | 0 | manual · DOM/CSS muss in React Native nachgebaut werden · Vencord-APIs: ChatButtons, Settings |
+| SendTimestamps | 2 | 0 | compiled · veyra.vencord.generated.sendtimestamps |
 | ServerInfo | 4 | 0 | manual · DOM/CSS muss in React Native nachgebaut werden · Vencord-APIs: ContextMenu · Plugin-Abhängigkeiten: DynamicImageModalAPI |
 | ServerListIndicators | 1 | 0 | manual · Vencord-APIs: ServerList, Settings · Plugin-Abhängigkeiten: ServerListAPI |
 | ShikiCodeblocks | 20 | 2 | repository · palmdevs.shiki-codeblocks |
@@ -146,7 +146,7 @@ Revision: ce9355e9a93e369c7295fa162ad563f7f97b1ff7
 | ShowHiddenThings | 2 | 5 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
 | ShowMeYourName | 2 | 1 | repository · bleelblep.show-tag |
 | ShowTimeoutDuration | 3 | 1 | repository · palmdevs.show-timeout-duration |
-| SilentMessageToggle | 1 | 0 | manual · Vencord-APIs: ChatButtons, MessageEvents, Settings |
+| SilentMessageToggle | 1 | 0 | compiled · veyra.vencord.generated.silentmessagetoggle |
 | SilentTyping | 1 | 1 | bundled · veyra.port.no-typing |
 | SortFriendRequests | 2 | 2 | manual · DOM/CSS muss in React Native nachgebaut werden · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
 | SpotifyControls | 6 | 3 | manual · Desktop-Native/Node/Electron benötigt Android-Adapter · DOM/CSS muss in React Native nachgebaut werden · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: PluginManager, Settings, Styles · Plugin-Abhängigkeiten: openInApp |
@@ -156,7 +156,7 @@ Revision: ce9355e9a93e369c7295fa162ad563f7f97b1ff7
 | StickerPaste | 2 | 1 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele |
 | StreamerModeOnStream | 1 | 0 | manual · Noch keine geprüfte mobile Semantik/ABI |
 | SuperReactionTweaks | 2 | 2 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele · Vencord-APIs: Settings |
-| TextReplace | 2 | 0 | manual · DOM/CSS muss in React Native nachgebaut werden · Vencord-APIs: Settings |
+| TextReplace | 2 | 0 | compiled · veyra.vencord.generated.textreplace |
 | ThemeAttributes | 2 | 4 | manual · Webpack-Patchanker sind keine Metro-Hook-Ziele |
 | Translate | 9 | 0 | manual · Desktop-Native/Node/Electron benötigt Android-Adapter · DOM/CSS muss in React Native nachgebaut werden · Vencord-APIs: ChatButtons, ContextMenu, Settings |
 | TypingIndicator | 2 | 2 | repository · palmdevs.better-typing-indicators |

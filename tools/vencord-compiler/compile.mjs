@@ -144,6 +144,62 @@ function codeblockTransform(entry){
  if(!tabMatch||tabMatch[1].length>8)return;
  return {op:'text.codeblockIndent',tabWidth:tabMatch[1].length,render:true,send:true,edit:true};
 }
+
+/** Lower supported Vencord message callbacks and literal setting defaults.
+ * Each rule inspects the actual AST, including callback bodies and helpers;
+ * it emits portable data IR, never executable desktop source. */
+function messageTransform(entry){
+ const {sf,o}=entry;
+ const before=prop(o,'onBeforeMessageSend');
+ const text=n=>n?.getText(sf)??'';
+ const declarations=new Map();
+ for(const n of sf.statements){
+  if(ts.isFunctionDeclaration(n)&&n.name)declarations.set(n.name.text,n);
+  if(ts.isVariableStatement(n))for(const d of n.declarationList.declarations)if(ts.isIdentifier(d.name))declarations.set(d.name.text,d.initializer);
+ }
+ const settings=declarations.get('settings');
+ const settingsObject=settings&&ts.isCallExpression(settings)&&settings.expression.getText(sf)==='definePluginSettings'&&ts.isObjectLiteralExpression(settings.arguments[0])?settings.arguments[0]:undefined;
+ const booleanDefault=k=>{const p=value(settingsObject,k);const d=p&&ts.isObjectLiteralExpression(p)?value(p,'default'):undefined;return d?.kind===ts.SyntaxKind.TrueKeyword?true:d?.kind===ts.SyntaxKind.FalseKeyword?false:undefined};
+ if(before&&ts.isMethodDeclaration(before)){
+  let transform;
+  walk(before,n=>{
+   if(!ts.isBinaryExpression(n)||n.operatorToken.kind!==ts.SyntaxKind.EqualsToken||!ts.isPropertyAccessExpression(n.left)||n.left.name.text!=='content'||!ts.isCallExpression(n.right))return;
+   const call=n.right,callee=call.expression;
+   if(ts.isPropertyAccessExpression(callee)&&callee.name.text==='replace'&&call.arguments.length===2&&ts.isRegularExpressionLiteral(call.arguments[0])&&ts.isIdentifier(call.arguments[1])){
+    const helper=declarations.get(call.arguments[1].text);
+    const regex=text(call.arguments[0]);
+    const src=text(helper);
+    const enabled=booleanDefault('replaceMessageContents');
+    if(enabled!==undefined&&text(before).includes('settings.store.replaceMessageContents')&&regex.includes('AM|PM')&&regex.includes('\\d{1,2}:\\d{2}')&&src.includes('date.setDate')&&src.includes('date.getTime() / 1000'))
+     transform={op:'message.timestamp',enabledDefault:enabled};
+   }else if(ts.isIdentifier(callee)&&call.arguments.length===1){
+    const helper=declarations.get(callee.text),src=text(helper);
+    if(src.includes('settings.store.stringRules')&&src.includes('settings.store.regexRules')&&src.includes('onlyIfIncludes')&&src.includes('replaceAll')){
+     let skipChannel='';
+     walk(before,n=>{
+      if(ts.isBinaryExpression(n)&&n.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken&&ts.isIdentifier(n.right)){
+       const val=string(declarations.get(n.right.text));if(val&&/^\d{16,22}$/.test(val))skipChannel=val;
+      }
+     });
+     if(skipChannel&&value(settingsObject,'stringRules')&&value(settingsObject,'regexRules'))transform={op:'message.replace',skipChannel,maxRules:24};
+    }
+   }
+  });
+  if(transform)return transform;
+ }
+ // Chat bar listener pattern: bounded, literal send-prefix with explicit
+ // opt-in button state, using the settings AST defaults for reset/persist.
+ const auto=booleanDefault('autoDisable'),persist=booleanDefault('persistState');
+ if(auto!==undefined&&persist!==undefined&&prop(o,'chatBarButton')){
+  let prefix;
+  walk(sf,n=>{
+   if(!ts.isBinaryExpression(n)||n.operatorToken.kind!==ts.SyntaxKind.EqualsToken||!ts.isPropertyAccessExpression(n.left)||n.left.name.text!=='content'||!ts.isBinaryExpression(n.right)||n.right.operatorToken.kind!==ts.SyntaxKind.PlusToken)return;
+   const p=string(n.right.left);if(p==='@silent '&&text(n.left)===text(n.right.right))prefix=p;
+  });
+  if(prefix&&text(sf).includes('addMessagePreSendListener')&&text(sf).includes('removeMessagePreSendListener')&&text(sf).includes('startsWith("@silent ")'))
+   return {op:'message.silent',prefix,autoDisableDefault:auto,persistDefault:persist};
+ }
+}
 const existing={
  silentTyping:['veyra.port.no-typing','Flux: lokale Tippanzeige','Keine Desktop-Schaltfläche.'],
  characterCounter:['veyra.port.char-counter','Metro ChatInputCharCounter + React Native','Mobile Darstellung; Neustart eventuell nötig.'],
@@ -182,11 +238,19 @@ for(const [id,list] of groups){
  const row={id,name:entry.name,description:entry.description,path:entry.f,sha256:fileInfo.get(entry.f).sha256,size:fileInfo.get(entry.f).size,
    files:list.length,sourceFiles:info.files,treeHash:info.treeHash,native:info.features.includes('Node/Electron')||info.features.includes('Desktop-Native')||list.some(f=>f.endsWith('/native.ts')),
    css:info.features.includes('CSS'),patches:info.patchCount>0,analysis:{...info,files:undefined}};
- const program=lifecycleSetter(entry)??codeblockTransform(entry);
+ const program=lifecycleSetter(entry)??codeblockTransform(entry)??messageTransform(entry);
  let rule;
  if(program){
   const target=writeGenerated(entry,program);
-  rule={id,port:target,kind:'compiled',adaptation:program.op==='moment.rounding'?'AST-Lifecycle → Metro Moment-API, mit Wiederherstellung des Originalzustands.':'AST-Texttransformation → mobile Chat-Render- und Send/Edit-Hooks.',limitation:program.op==='moment.rounding'?'Wirkt nur, wenn der Mobile-Client Moment mit dieser API bereitstellt.':'Codeblöcke statt Desktop-Renderer; mobile Hook-Ziele werden zur Laufzeit geprüft.',program};
+  const descriptions={
+   'moment.rounding':['AST-Lifecycle → Metro Moment-API, mit Wiederherstellung des Originalzustands.','Wirkt nur, wenn der Mobile-Client Moment mit dieser API bereitstellt.'],
+   'text.codeblockIndent':['AST-Texttransformation → mobile Chat-Render- und Send/Edit-Hooks.','Codeblöcke statt Desktop-Renderer; mobile Hook-Ziele werden zur Laufzeit geprüft.'],
+   'message.replace':['AST-Regelengine → Mobile Message-Send-Hook und lokaler RN-Regeleditor.','Textregeln plus begrenzte Regex ohne Gruppen/Quantifizierer; keine Desktop-Regelimporte.'],
+   'message.timestamp':['AST-Zeitparser → Mobile Send-Hook und lokaler Zeitstempel-Generator.','Uhrzeit-Shortcuts und Kopieren im Plugin-Menü; kein Desktop-Datumsdialog.'],
+   'message.silent':['AST-Send-Listener → Mobile Send-Hook, Chat-Aktionsbutton und Einstellungen.','Manuell aktivierter Modus; kein automatisches Senden. Mobile Modulbindung erforderlich.']
+  };
+  const [adaptation,limitation]=descriptions[program.op];
+  rule={id,port:target,kind:'compiled',adaptation,limitation,program};
  }else if(existing[id]){
   const [port,adaptation,limitation]=existing[id];rule={id,port,adaptation,limitation,kind:'bundled'};
  }else if(eqMap.has(id)){

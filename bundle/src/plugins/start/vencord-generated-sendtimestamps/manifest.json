@@ -1,0 +1,17 @@
+{
+    "id": "veyra.vencord.generated.sendtimestamps",
+    "name": "Vencord · SendTimestamps",
+    "description": "Send timestamps easily via chat box button & text shortcuts. Read the extended description! (generated mobile adapter)",
+    "author": {
+        "name": "Veyra · Vencord contributors",
+        "links": [
+            {
+                "url": "https://github.com/Vendicated/Vencord/tree/ce9355e9a93e369c7295fa162ad563f7f97b1ff7/src/plugins/sendTimestamps",
+                "title": "Original source and license"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {}
+}

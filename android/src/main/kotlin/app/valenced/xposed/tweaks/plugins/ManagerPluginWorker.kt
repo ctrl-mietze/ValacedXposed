@@ -237,6 +237,7 @@ internal object ManagerPluginWorker {
                 .put("essential", essential).put("internal", InternalPluginFlags.INTERNAL in flags)
                 .put("enabled", enabled).put("failed", id in pluginRegistry.discoveryFailures || id in pluginRegistry.bootErrors)
                 .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: "")
+                .put("compilerRuntime", CompilerRuntimeState.snapshot(id))
                 .put("repo", SourcesStore[id]?.repo ?: ""))
         }
         return JSONObject().put("message", message).put("legacyEnabled",legacyEnabled()).put("repos", repos)

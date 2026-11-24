@@ -1708,13 +1708,26 @@ class ValancedXActivity : Activity() {
                 val plan=app.valenced.xposed.manager.analysis.VencordTranslator.plan(id,item.optString("sha256"),item.optString("treeHash"))
                 val ready=plan.optBoolean("supported")
                 val target=plan.optString("target")
-                val active=ready&&installed.any{it.optString("id")==target&&it.optBoolean("enabled")}
+                val mobile=installed.firstOrNull{it.optString("id")==target}
+                val active=ready&&mobile?.optBoolean("enabled")==true
                 val mode=plan.optString("mode")
                 tag="vx-vencord-"+id
                 add(this,label(item.optString("name"),16f,whiteColor,true))
                 add(this,label(item.optString("description"),12f,mutedColor),top=4)
                 add(this,label(if(active)"Mobile-Port aktiviert" else if(mode=="compiled")"AST-kompilierter Mobile-Port"
                     else if(mode=="repository")"Android-Gegenstück · geprüfte ZIP" else if(ready)"Integrierter Mobile-Port" else "Manueller Port erforderlich",11f,if(ready)mintColor else warmColor),top=5)
+                if(mode=="compiled"&&active){
+                    val runtime=mobile?.optJSONObject("compilerRuntime")
+                    val state=runtime?.optString("status").orEmpty()
+                    val hooks=runtime?.optJSONArray("bound")
+                    val expected=runtime?.optJSONArray("expected")
+                    val hooked=hooks?.length()?:0
+                    val total=expected?.length()?:0
+                    val status=when(state){"bound"->"Alle Metro-Hooks gebunden";"partial"->"Teilweise gebunden";"waiting"->"Wartet auf Metro-Module";"stopped"->"Runtime gestoppt";else->"Noch kein Runtime-Nachweis"}
+                    add(this,label(status+" · "+hooked+"/"+total+" Hooks",11f,if(state=="bound")mintColor else warmColor),top=5)
+                    if(hooks!=null&&hooks.length()>0)add(this,label((0 until hooks.length()).joinToString(", "){hooks.optString(it)},10f,mutedColor),top=3)
+                    add(this,button("Hook-Status aktualisieren"){pluginAction("snapshot")},top=6)
+                }
                 val ast=item.optJSONObject("analysis")?:JSONObject()
                 add(this,label(ast.optInt("codeFiles").toString()+" Code-Dateien · "+ast.optInt("patchCount")+" Webpack-Patches · "+(ast.optJSONArray("sharedApis")?.length()?:0)+" Vencord-APIs",11f,mutedColor),top=4)
                 if(ready){

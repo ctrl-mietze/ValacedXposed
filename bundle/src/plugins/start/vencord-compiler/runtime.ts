@@ -2,19 +2,23 @@ import { getModules } from '@valenced/modules/finders'
 import { withName, withProps } from '@valenced/modules/finders/filters'
 import { before } from '@valenced/patcher'
 import type { PluginOptions } from '@valenced/plugins/types'
+import { createMessageOptions } from './message-runtime'
+import { publishCompilerState } from './runtime-status'
 import { normalizeCodeFences, normalizeRenderedRows, type Program } from './operations'
 
 /** Compiler runtime uses named mobile API targets and reversible operations.
  * No Vencord source eval, desktop patches, arbitrary native calls or new imports. */
 export function createCompiledOptions(program:Program):PluginOptions{
+    if(program.op==='message.replace'||program.op==='message.timestamp'||program.op==='message.silent')return createMessageOptions(program)
     return {
         start({cleanup,plugin}){
             const expected=new Set<string>()
             const bound=new Set<string>()
             let alive=true
-            function mark(name:string){bound.add(name);nativeLoggingHook('[ValancedX Compiler] '+program.op+' bound '+name,1)}
+            function publish(){publishCompilerState(plugin.manifest.id,[...expected],[...bound])}
+            function mark(name:string){bound.add(name);publish();nativeLoggingHook('[ValancedX Compiler] '+program.op+' bound '+name,1)}
             function fail(error:unknown){plugin.reportError(error)}
-            cleanup(()=>{alive=false})
+            cleanup(()=>{alive=false;publishCompilerState(plugin.manifest.id,[],[],'stopped')})
             if(program.op==='moment.rounding'){
                 expected.add('Moment')
                 const rounder=({floor:Math.floor,ceil:Math.ceil,round:Math.round,trunc:Math.trunc})[program.rounding]
@@ -73,9 +77,11 @@ export function createCompiledOptions(program:Program):PluginOptions{
             }else throw new Error('Unknown compiler operation')
             // A lazy Metro module may load later. Report pending targets without
             // pretending the port has already bound them or crashing the host.
+            publish()
             const timer=setTimeout(()=>{
                 if(!alive)return
                 const missing=[...expected].filter(x=>!bound.has(x))
+                publish()
                 if(missing.length)nativeLoggingHook('[ValancedX Compiler] Pending '+program.op+': '+missing.join(', '),2)
             },8000)
             cleanup(()=>clearTimeout(timer))

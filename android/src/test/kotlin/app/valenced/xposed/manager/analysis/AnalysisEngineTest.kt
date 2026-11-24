@@ -42,7 +42,7 @@ class AnalysisEngineTest {
         assertFalse(VencordTranslator.plan("unknown","wrong").getBoolean("supported"))
         assertFalse(VencordTranslator.plan("silentTyping",r.sourceHash,"wrong").getBoolean("supported"))
         assertTrue(VencordTranslator.plan("silentTyping",r.sourceHash,r.treeHash).getBoolean("supported"))
-        assertEquals(2,VencordTranslator.rules.values.count{it.kind=="compiled"})
+        assertEquals(5,VencordTranslator.rules.values.count{it.kind=="compiled"})
         assertEquals(5,VencordTranslator.rules.values.count{it.kind=="bundled"})
         assertEquals(24,VencordTranslator.rules.values.count{it.kind=="repository"})
         assertTrue(VencordTranslator.rules.values.filter{it.kind=="repository"}.all{it.artifactHash.matches(Regex("[a-f0-9]{64}"))})
