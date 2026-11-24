@@ -1251,7 +1251,7 @@ class ValancedXActivity : Activity() {
                     LinearLayout.LayoutParams(-1,dp(168)).apply{topMargin=dp(10)})
                 val swatches=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}
                 for(color in listOf(preset.base,preset.glowA,preset.glowB,preset.accent)){
-                    val v=View(this@ValancedXActivity).apply{background=rounded(android.graphics.Color.parseColor(color),borderColor,6)}
+                    val v=View(this@ValancedXActivity).apply{this.background=rounded(android.graphics.Color.parseColor(color),borderColor,6)}
                     swatches.addView(v,LinearLayout.LayoutParams(dp(24),dp(8)).apply{rightMargin=dp(5)})
                 }
                 add(this,swatches,top=8)
