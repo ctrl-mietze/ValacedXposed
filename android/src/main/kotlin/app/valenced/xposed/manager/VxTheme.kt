@@ -30,7 +30,16 @@ internal object VxThemes {
     fun get(id: String?) = all.firstOrNull { it.id == id } ?: all.first()
     val accents = listOf("Lavendel" to c("B79CFF"),"Mint" to c("71E6C9"),"Eisblau" to c("9ACBFF"),
         "Rosé" to c("F4ACD5"),"Amber" to c("FFD18A"),"Silber" to c("D8DCE9"))
-    fun onColor(color:Int):Int {\n        fun luminance(value:Int):Double {\n            fun linear(c:Int):Double {val v=c/255.0;return if(v<=.04045)v/12.92 else Math.pow((v+.055)/1.055,2.4)}\n            return .2126*linear(Color.red(value))+.7152*linear(Color.green(value))+.0722*linear(Color.blue(value))\n        }\n        val l=luminance(color)\n        val dark=c("10121A")\n        return if((l+.05)/(luminance(dark)+.05)>=1.05/(l+.05)) dark else Color.WHITE\n    }\n    fun blend(a: Int,b: Int,f: Float): Int = Color.rgb(
+    fun onColor(color:Int):Int {
+        fun luminance(value:Int):Double {
+            fun linear(c:Int):Double {val v=c/255.0;return if(v<=.04045)v/12.92 else Math.pow((v+.055)/1.055,2.4)}
+            return .2126*linear(Color.red(value))+.7152*linear(Color.green(value))+.0722*linear(Color.blue(value))
+        }
+        val l=luminance(color)
+        val dark=c("10121A")
+        return if((l+.05)/(luminance(dark)+.05)>=1.05/(l+.05)) dark else Color.WHITE
+    }
+    fun blend(a: Int,b: Int,f: Float): Int = Color.rgb(
         (Color.red(a)*(1-f)+Color.red(b)*f).toInt(),
         (Color.green(a)*(1-f)+Color.green(b)*f).toInt(),
         (Color.blue(a)*(1-f)+Color.blue(b)*f).toInt())
