@@ -10,6 +10,11 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.os.Handler
+import android.os.Looper
+import android.content.SharedPreferences
+import android.view.WindowInsets
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
@@ -29,18 +34,29 @@ import java.util.Locale
 
 /** An offline-first native manager. No Discord APK patcher or telemetry backend. */
 class ValancedXActivity : Activity() {
-    private val backgroundColor = Color.rgb(10, 13, 23)
-    private val surfaceColor = Color.rgb(22, 27, 43)
-    private val raisedColor = Color.rgb(32, 38, 58)
-    private val borderColor = Color.rgb(53, 60, 81)
-    private val accentColor = Color.rgb(181, 158, 255)
+    private val backgroundColor = Color.rgb(13, 14, 18)
+    private val surfaceColor = Color.rgb(23, 25, 31)
+    private val raisedColor = Color.rgb(33, 35, 44)
+    private val borderColor = Color.rgb(49, 51, 61)
+    private val accentColor = Color.rgb(190, 174, 255)
     private val mintColor = Color.rgb(113, 230, 201)
     private val warmColor = Color.rgb(255, 203, 115)
     private val errorColor = Color.rgb(255, 143, 157)
     private val whiteColor = Color.rgb(245, 245, 252)
-    private val mutedColor = Color.rgb(158, 169, 192)
+    private val mutedColor = Color.rgb(160, 163, 177)
     private val tabs = arrayOf("Start", "Module", "Diagnose", "Info")
     private var currentTab = 0
+    private var scrollView: ScrollView? = null
+    private var connectionGranted = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val refresh = Runnable { render(preserveScroll = true) }
+    private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key?.startsWith("last_") == true || key?.startsWith("total_") == true ||
+            key == "event_history" || key == "error_streak") {
+            mainHandler.removeCallbacks(refresh)
+            mainHandler.postDelayed(refresh, 180)
+        }
+    }
 
     private val prefs by lazy {
         getSharedPreferences(SettingsProvider.PREFS, Context.MODE_PRIVATE)
@@ -59,8 +75,29 @@ class ValancedXActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        connectionGranted = grantConnection()
+        prefs.registerOnSharedPreferenceChangeListener(listener)
         render()
     }
+
+    override fun onPause() {
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        mainHandler.removeCallbacks(refresh)
+        super.onPause()
+    }
+
+    // Grant access only to a harmless, dedicated URI. Android's documented
+    // URI-grant visibility mechanism makes this provider discoverable to Discord.
+    // The provider still authenticates every call using Binder's actual caller UID.
+    private fun grantConnection(): Boolean = runCatching {
+        if (discordVersion() == null) return false
+        grantUriPermission(
+            "com.discord",
+            Uri.parse("content://" + BuildConfig.APPLICATION_ID + ".settings/connection"),
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+        true
+    }.getOrElse { false }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("tab", currentTab)
@@ -89,6 +126,22 @@ class ValancedXActivity : Activity() {
 
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
+    private fun interactive(fill: Int, stroke: Int, radius: Int = 14) =
+        RippleDrawable(ColorStateList.valueOf(0x28FFFFFF), rounded(fill, stroke, radius), null)
+
+    private fun eyebrow(parent: LinearLayout, value: String) {
+        add(parent, label(value.uppercase(Locale.ROOT), 11f, mutedColor, true).apply {
+            letterSpacing = .12f
+        }, top = 20, bottom = 2)
+    }
+
+    private fun statusRow(parent: LinearLayout, name: String, value: String, color: Int) {
+        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        row.addView(label(name, 13f, mutedColor), LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(label(value, 13f, color, true).apply { gravity = Gravity.END })
+        add(parent, row, top = 6, bottom = 6)
+    }
+
     private fun add(parent: LinearLayout, view: View, top: Int = 0, bottom: Int = 0) {
         val params = LinearLayout.LayoutParams(-1, -2)
         params.setMargins(0, dp(top), 0, dp(bottom))
@@ -97,8 +150,8 @@ class ValancedXActivity : Activity() {
 
     private fun card(parent: LinearLayout, top: Int = 12, tint: Int = surfaceColor, build: LinearLayout.() -> Unit) {
         val child = column().apply {
-            setPadding(dp(17), dp(16), dp(17), dp(17))
-            background = rounded(tint)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = rounded(tint, borderColor, 18)
         }
         child.build()
         add(parent, child, top)
@@ -123,7 +176,7 @@ class ValancedXActivity : Activity() {
         ).apply {
             gravity = Gravity.CENTER
             setPadding(dp(12), dp(13), dp(12), dp(13))
-            background = rounded(
+            background = interactive(
                 if (primary) accentColor else raisedColor,
                 if (primary) accentColor else borderColor, 13,
             )
@@ -149,7 +202,7 @@ class ValancedXActivity : Activity() {
                     editor.putBoolean("auto_recovery", false).putInt("error_streak", 0)
                 }
                 editor.apply()
-                render()
+                render(preserveScroll = true)
                 Toast.makeText(
                     this@ValancedXActivity,
                     "Nach einem vollständigen Discord-Neustart wirksam",
@@ -164,8 +217,8 @@ class ValancedXActivity : Activity() {
     private fun state(): String = prefs.getString("last_state", "").orEmpty()
 
     private fun statusLabel(value: String = state()): String = when (value) {
-        "bundle_injected" -> "Hermes-Bundle zuletzt geladen"
-        "hooks_ready" -> "Hooks zuletzt registriert"
+        "bundle_injected" -> "Hermes geladen"
+        "hooks_ready" -> "Native Hooks registriert"
         "framework_attached" -> "Xposed-Einstieg erkannt"
         "module_path_missing" -> "Modul-Dateipfad nicht gefunden"
         "script_loader_missing" -> "React-Native-Loader nicht gefunden"
@@ -176,7 +229,7 @@ class ValancedXActivity : Activity() {
         "bundle_error" -> "Fehler beim Hermes-Bundle"
         "js_runtime_error" -> "JavaScript-Laufzeitfehler in Discord"
         "bootstrap_error" -> "Fehler bei der Hook-Initialisierung"
-        else -> "Noch keine Hook-Rückmeldung"
+        else -> "Verbindung ausstehend"
     }
 
     private fun stateColor(): Int = when (state()) {
@@ -231,52 +284,49 @@ class ValancedXActivity : Activity() {
     }
 
     private fun dashboard(parent: LinearLayout) {
-        card(parent, top = 18, tint = Color.rgb(27, 28, 49)) {
-            add(this, label("MODULE HEALTH", 11f, accentColor, true))
-            add(this, label(statusLabel(), 21f, stateColor(), true), top = 12)
-            add(this, label("Letzte Rückmeldung: " + time(prefs.getLong("last_time", 0L)), 12f, mutedColor), top = 8)
-            add(
-                this,
-                label(
-                    if (discordVersion() != null) "Discord " + discordVersion() + " erkannt"
-                    else "Discord wurde nicht gefunden",
-                    13f, if (discordVersion() != null) mintColor else warmColor,
-                ),
-                top = 16,
-            )
-            add(
-                this,
-                label(
-                    if (prefs.getLong("last_time", 0L) == 0L)
-                        "Kein Status aus Discord empfangen. Schau in den LSPosed-Framework-Logs nach ValancedX und prüfe den Discord-Scope. Der native Loader versucht die Hooks jetzt bereits beim Paketladeereignis zu registrieren."
-                    else
-                        "Status basiert auf beobachteten Ereignissen, nicht auf einem permanenten Live-Test.",
-                    12f, mutedColor,
-                ),
-                top = 9,
-            )
+        val seen = prefs.getLong("last_time", 0L) > 0L
+        eyebrow(parent, "Übersicht")
+        card(parent, top = 8) {
+            val top = LinearLayout(this@ValancedXActivity).apply { gravity = Gravity.CENTER_VERTICAL }
+            top.addView(View(this@ValancedXActivity).apply {
+                background = rounded(stateColor(), stateColor(), 8)
+            }, LinearLayout.LayoutParams(dp(9), dp(9)).apply { rightMargin = dp(8) })
+            top.addView(label(if (seen) "LETZTES EREIGNIS" else "KEIN LIVE-STATUS", 11f, stateColor(), true))
+            add(this, top)
+            add(this, label(statusLabel(), 24f, whiteColor, true), top = 10)
+            add(this, label(if (seen) time(prefs.getLong("last_time", 0L))
+                else "Öffne Discord nach der Modul-Aktivierung. Ein fehlendes Ereignis bedeutet nicht automatisch, dass LSPosed inaktiv ist.",
+                13f, mutedColor), top = 7)
+            line(this)
+            statusRow(this, "Discord", discordVersion() ?: "Nicht installiert", if (discordVersion() != null) mintColor else warmColor)
+            statusRow(this, "IPC-Zugriff", if (connectionGranted) "URI erteilt" else "Nicht erteilt",
+                if (connectionGranted) accentColor else warmColor)
+            statusRow(this, "Recovery", if (prefs.getBoolean("safe_mode", false)) "Aktiv" else "Aus",
+                if (prefs.getBoolean("safe_mode", false)) warmColor else mutedColor)
+            add(this, button("Discord öffnen", primary = true) { openDiscord() }, top = 12)
         }
+        eyebrow(parent, "Aktivität")
         stats(parent)
-        heading(parent, "Schnellzugriff")
-        card(parent) {
-            add(this, button("Discord öffnen", primary = true) { openDiscord() })
-            add(this, button("Xposed-Scope einrichten") { showSetup() }, top = 10)
-            add(this, button("Diagnose kopieren") { copyDiagnostics() }, top = 10)
+        eyebrow(parent, "Einrichtung & Diagnose")
+        card(parent, top = 8) {
+            add(this, button("LSPosed-Scope einrichten") { showSetup() })
+            add(this, button("Status aktualisieren") {
+                connectionGranted = grantConnection()
+                render(preserveScroll = true)
+            }, top = 8)
+            add(this, button("Diagnose kopieren") { copyDiagnostics() }, top = 8)
         }
-        heading(parent, "Kompatibilität")
-        card(parent) {
-            details(this, "Android-Manager", "ValancedX " + BuildConfig.VERSION_NAME, mintColor)
-            line(this)
-            details(this, "Discord-Paket", if (discordVersion() != null) "com.discord installiert" else "Nicht installiert")
-            line(this)
-            details(this, "Xposed-Framework", "Scope im Framework konfigurieren", accentColor)
-            line(this)
-            details(this, "Hook-Kompatibilität", "Noch kein bestätigter Gerätetest", mutedColor)
+        eyebrow(parent, "Installation")
+        card(parent, top = 8) {
+            statusRow(this, "Manager", BuildConfig.VERSION_NAME, accentColor)
+            statusRow(this, "Android", android.os.Build.VERSION.RELEASE, whiteColor)
+            statusRow(this, "Paket", "com.discord", mutedColor)
+            add(this, label("Die Statusanzeige unterscheidet den erteilten IPC-Zugriff von tatsächlichen Hook-Ereignissen.", 12f, mutedColor), top = 8)
         }
     }
 
     private fun modules(parent: LinearLayout) {
-        heading(parent, "Hook-Konfiguration")
+        eyebrow(parent, "Hook-Konfiguration")
         card(parent) {
             setting(this, "ValancedX-Erweiterungen", "Steuert die Hermes-Injektion. Der native Xposed-Hook wird früh registriert.", "hook_enabled", true)
             line(this)
@@ -298,14 +348,14 @@ class ValancedXActivity : Activity() {
                 )
             }
         }
-        heading(parent, "Datenschutz")
+        eyebrow(parent, "Datenschutz")
         card(parent) {
             setting(this, "Ereignishistorie", "Maximal 32 lokale Status-Ereignisse.", "history_enabled", true)
             line(this)
             setting(this, "Kurze Fehlerdetails", "Speichert Fehlermeldungen nur auf diesem Gerät.", "diagnostics_enabled", true)
             add(this, label("Kein eigener Telemetrie-Upload. Änderungen gelten beim nächsten Discord-Neustart.", 12f, mutedColor), top = 10)
         }
-        heading(parent, "Wiederherstellung")
+        eyebrow(parent, "Wiederherstellung")
         card(parent) {
             add(this, button("Recovery aktivieren") {
                 prefs.edit().putBoolean("safe_mode", true).apply()
@@ -329,11 +379,12 @@ class ValancedXActivity : Activity() {
     }
 
     private fun diagnostics(parent: LinearLayout) {
-        heading(parent, "Diagnosezentrale")
+        eyebrow(parent, "Diagnosezentrale")
         card(parent) {
             add(this, label(statusLabel(), 19f, stateColor(), true))
             add(this, label("Zuletzt: " + time(prefs.getLong("last_time", 0L)), 12f, mutedColor), top = 8)
             add(this, label("Fehlerfolge: " + prefs.getInt("error_streak", 0) + " / 3", 12f, mutedColor), top = 7)
+            add(this, label("IPC-URI: " + if (connectionGranted) "erteilt (kein Live-Nachweis)" else "nicht erteilt", 12f, mutedColor), top = 7)
             val last = prefs.getString("last_details", "").orEmpty()
             if (last.isNotBlank()) add(this, label(last, 12f, warmColor), top = 10)
         }
@@ -342,7 +393,7 @@ class ValancedXActivity : Activity() {
             add(this, button("Bericht kopieren", true) { copyDiagnostics() })
             add(this, button("Bericht teilen") { shareDiagnostics() }, top = 9)
         }
-        heading(parent, "Ereignisverlauf")
+        eyebrow(parent, "Ereignisverlauf")
         card(parent) {
             val events = eventHistory()
             if (events.length() == 0) {
@@ -374,8 +425,8 @@ class ValancedXActivity : Activity() {
     }
 
     private fun about(parent: LinearLayout) {
-        heading(parent, "Über ValancedX")
-        card(parent, tint = Color.rgb(27, 28, 49)) {
+        eyebrow(parent, "Über ValancedX")
+        card(parent, tint = Color.rgb(26, 26, 35)) {
             add(this, label("ValancedX", 25f, whiteColor, true))
             add(this, label("Release " + BuildConfig.VERSION_NAME, 13f, accentColor), top = 6)
             add(
@@ -389,7 +440,7 @@ class ValancedXActivity : Activity() {
             )
             add(this, label("Paket: " + BuildConfig.APPLICATION_ID, 12f, mutedColor), top = 15)
         }
-        heading(parent, "Open Source")
+        eyebrow(parent, "Open Source")
         card(parent) {
             add(
                 this,
@@ -415,6 +466,8 @@ class ValancedXActivity : Activity() {
             "Paket: " + BuildConfig.APPLICATION_ID,
             "Discord: " + (discordVersion() ?: "nicht installiert"),
             "Status: " + statusLabel(),
+            "IPC-URI erteilt: " + connectionGranted,
+            "Letzte Details: " + prefs.getString("last_details", "").orEmpty(),
             "Letztes Event: " + time(prefs.getLong("last_time", 0L)),
             "Hook: " + prefs.getBoolean("hook_enabled", true),
             "Hermes: " + prefs.getBoolean("javascript_enabled", true),
@@ -448,10 +501,13 @@ class ValancedXActivity : Activity() {
     }
 
     private fun openDiscord() {
+        connectionGranted = grantConnection()
         val launch = packageManager.getLaunchIntentForPackage("com.discord")
         if (launch == null) {
             Toast.makeText(this, "Discord nicht gefunden", Toast.LENGTH_SHORT).show()
-        } else startActivity(launch)
+        } else runCatching { startActivity(launch) }.onFailure {
+            Toast.makeText(this, "Discord konnte nicht geöffnet werden", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun openWeb(url: String) {
@@ -489,66 +545,86 @@ class ValancedXActivity : Activity() {
             .show()
     }
 
-    private fun render() {
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(backgroundColor)
-            isFillViewport = true
+    private fun render(preserveScroll: Boolean = false) {
+        val previousY = if (preserveScroll) scrollView?.scrollY ?: 0 else 0
+        val root = column().apply { setBackgroundColor(backgroundColor) }
+        val header = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(18), dp(13), dp(18), dp(12))
         }
-        val page = column().apply {
-            setPadding(dp(19), dp(24), dp(19), dp(35))
-        }
-        scroll.addView(page)
-        setContentView(scroll)
-
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.ic_valancedx)
             contentDescription = "ValancedX"
-        }, LinearLayout.LayoutParams(dp(56), dp(56)))
-        val title = column().apply { setPadding(dp(12), 0, 0, 0) }
-        add(title, label("ValancedX", 27f, whiteColor, true))
-        add(title, label("XPOSED MODULE  /  " + BuildConfig.VERSION_NAME, 11f, accentColor, true), top = 5)
-        header.addView(title)
-        add(page, header)
-        add(page, label("Discord, ohne gepatchten Client.", 14f, mutedColor), top = 18)
+        }, LinearLayout.LayoutParams(dp(43), dp(43)))
+        val title = column().apply { setPadding(dp(11), 0, 0, 0) }
+        add(title, label("ValancedX", 23f, whiteColor, true))
+        add(title, label("XPOSED  /  " + BuildConfig.VERSION_NAME, 10f, mutedColor, true), top = 3)
+        header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(label("↻", 23f, accentColor, true).apply {
+            gravity = Gravity.CENTER
+            contentDescription = "Aktualisieren"
+            background = interactive(surfaceColor, borderColor, 12)
+            isFocusable = true
+            setOnClickListener { connectionGranted = grantConnection(); render(preserveScroll = true) }
+        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
-        val navigation = LinearLayout(this).apply {
-            background = rounded(surfaceColor, borderColor, 16)
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
         }
-        for (index in tabs.indices) {
-            val selected = index == currentTab
-            val cell = label(
-                tabs[index], 12f,
-                if (selected) backgroundColor else mutedColor,
-                selected,
-            ).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(4), dp(12), dp(4), dp(12))
-                if (selected) background = rounded(accentColor, accentColor, 12)
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    currentTab = index
-                    render()
-                }
-            }
-            navigation.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
-        }
-        add(page, navigation, top = 22)
-
+        scrollView = scroll
+        val page = column().apply { setPadding(dp(18), 0, dp(18), dp(22)) }
+        scroll.addView(page)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         when (currentTab) {
             0 -> dashboard(page)
             1 -> modules(page)
             2 -> diagnostics(page)
             else -> about(page)
         }
-        add(
-            page,
-            label("VALACEDXPOSED · GPL-3.0 · DISCORD XPOSED", 10f, mutedColor).apply {
+        val navigation = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(surfaceColor, borderColor, 22)
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+        }
+        val symbols = arrayOf("⌂", "≡", "≋", "ⓘ")
+        for (index in tabs.indices) {
+            val selected = index == currentTab
+            val cell = column().apply {
                 gravity = Gravity.CENTER
-            },
-            top = 30,
-        )
+                setPadding(dp(3), dp(5), dp(3), dp(5))
+                background = interactive(if (selected) raisedColor else surfaceColor,
+                    if (selected) borderColor else surfaceColor, 16)
+                isClickable = true
+                isFocusable = true
+                isSelected = selected
+                contentDescription = tabs[index]
+                add(this, label(symbols[index], 21f, if (selected) accentColor else mutedColor, true).apply {
+                    gravity = Gravity.CENTER
+                })
+                add(this, label(tabs[index], 11f, if (selected) whiteColor else mutedColor, selected).apply {
+                    gravity = Gravity.CENTER
+                }, top = 2)
+                setOnClickListener {
+                    if (currentTab != index) { currentTab = index; render() }
+                }
+            }
+            navigation.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        val navParams = LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(dp(14), dp(5), dp(14), dp(9))
+        }
+        root.addView(navigation, navParams)
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            root.setOnApplyWindowInsetsListener { view, insets ->
+                val bars = insets.getInsets(WindowInsets.Type.systemBars())
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                insets
+            }
+        }
+        setContentView(root)
+        root.requestApplyInsets()
+        if (previousY > 0) scroll.post { scroll.scrollTo(0, previousY) }
     }
 }

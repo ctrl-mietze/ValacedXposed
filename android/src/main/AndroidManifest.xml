@@ -21,7 +21,9 @@
         <provider
             android:name="app.valenced.xposed.manager.SettingsProvider"
             android:authorities="${applicationId}.settings"
-            android:exported="true" />
+            android:exported="true">
+            <grant-uri-permission android:path="/connection" />
+        </provider>
         <meta-data android:name="xposedmodule" android:value="true"/>
         <meta-data android:name="xposeddescription" android:resource="@string/xposed_description"/>
         <meta-data android:name="xposedminversion" android:value="82"/>

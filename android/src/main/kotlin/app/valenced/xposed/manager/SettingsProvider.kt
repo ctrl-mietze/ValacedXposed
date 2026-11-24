@@ -23,6 +23,7 @@ class SettingsProvider : ContentProvider() {
 
     override fun onCreate(): Boolean = true
 
+    @Synchronized
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
         val ctx = context ?: return null
         val uid = Binder.getCallingUid()
@@ -69,6 +70,7 @@ class SettingsProvider : ContentProvider() {
 
                 when (state) {
                     "initializing" -> boots++
+                    "js_runtime_error" -> errors++
                     "bundle_injected" -> {
                         successes++
                         streak = 0
