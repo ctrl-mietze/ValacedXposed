@@ -132,6 +132,20 @@ class PluginDependencyGraph(private val manifests: Map<String, PluginManifest>) 
             }
         }
 
+        // The cascade above reaches a fixed point, but the first pass that
+        // drops a plugin may only have seen some of its failed dependencies.
+        // Recompute diagnostics against the final set so directory iteration
+        // order cannot hide a second (or later, transitively failed) dependency.
+        for (id in dropped.keys.toList()) {
+            val manifest = manifests.getValue(id)
+            val problems = manifest.dependencies.mapNotNull { (depId, dep) ->
+                if (dep.optional) null
+                else problemOf(depId, dep,
+                    if (depId != id && depId in dropped) null else manifests[depId]?.version)
+            }
+            if (problems.isNotEmpty()) dropped[id] = problems
+        }
+
         val remaining = manifests.keys.filterTo(mutableSetOf()) { it !in dropped }
         val ordered = mutableListOf<String>()
         val cycles = mutableSetOf<String>()

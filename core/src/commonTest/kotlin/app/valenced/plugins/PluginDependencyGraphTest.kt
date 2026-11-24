@@ -211,6 +211,27 @@ class PluginDependencyGraphTest {
     }
 
     @Test
+    fun `cascaded failures report every required dependency independent of order`() {
+        val root = manifest("top", dependencies = arrayOf("bad1" to dep(), "bad2" to dep(), "optional" to dep(optional = true)))
+        val bad1 = manifest("bad1", dependencies = arrayOf("absent" to dep()))
+        val bad2 = manifest("bad2", dependencies = arrayOf("middle" to dep()))
+        val middle = manifest("middle", dependencies = arrayOf("absent" to dep()))
+        val optional = manifest("optional", dependencies = arrayOf("absent" to dep()))
+        for (arrangement in listOf(
+            arrayOf(bad1, root, bad2, middle, optional),
+            arrayOf(root, bad1, bad2, middle, optional),
+            arrayOf(optional, middle, bad2, bad1, root),
+        )) {
+            val order = graphOf(*arrangement).loadOrder()
+            val errors = order.dropped.getValue("top")
+            assertEquals(2, errors.size)
+            assertTrue(errors.all { it.code == PluginErrorCodes.DEPENDENCY_MISSING })
+            assertTrue(errors.any { "'bad1'" in it.reason })
+            assertTrue(errors.any { "'bad2'" in it.reason })
+        }
+    }
+
+    @Test
     fun `an optional dependency never drops the dependent`() {
         val order = graphOf(
             manifest("a", dependencies = arrayOf("absent" to dep(optional = true))),
