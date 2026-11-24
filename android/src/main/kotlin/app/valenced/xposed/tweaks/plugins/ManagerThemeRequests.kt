@@ -2,7 +2,8 @@ package app.valenced.xposed.tweaks.plugins
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
+import app.valenced.xposed.manager.VxMotionPresets
+import app.valenced.xposed.manager.VxMotionRenderer
 import app.valenced.xposed.ETagFetchResult
 import app.valenced.xposed.PluginHttps
 import app.valenced.plugins.repos.sha256Hex
@@ -105,25 +106,19 @@ internal object ManagerThemeAssets {
             .put("description",doc.optString("description").take(200)).put("files",families)
     }
 
-    /** A locally generated backing gradient. JS animates it only in the
-     * Discord background layer, not via a video overlay over chat controls. */
+    /** A bounded, local gradient asset. Versioned filenames preserve previously
+     * selected backgrounds; the JS renderer recognizes both generations. */
     fun motionPath(context:Context,style:String):String {
-        val colors=when(style){
-            "aurora"->intArrayOf(0xff080b17.toInt(),0xff412b70.toInt(),0xff17605b.toInt())
-            "bloom"->intArrayOf(0xff07060c.toInt(),0xff602b65.toInt(),0xff251c46.toInt())
-            "eclipse"->intArrayOf(0xff000000.toInt(),0xff213b63.toInt(),0xff382753.toInt())
-            else->error("Unbekannter Motion-Hintergrund.")
-        }
-        val file=File(directory(context),"veyra-motion-"+style+".png")
-        if(!file.isFile){
-            val bitmap=Bitmap.createBitmap(144,240,Bitmap.Config.ARGB_8888)
-            val canvas=android.graphics.Canvas(bitmap)
-            val paint=android.graphics.Paint().apply{
-                shader=android.graphics.LinearGradient(0f,0f,144f,240f,colors,null,android.graphics.Shader.TileMode.CLAMP)
-            }
-            canvas.drawRect(0f,0f,144f,240f,paint)
-            file.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
-            bitmap.recycle()
+        val preset=VxMotionPresets.get(style)?:error("Unbekanntes Motion-Theme.")
+        val file=File(directory(context),"veyra-motion-"+style+"-v2.png")
+        if(!file.isFile||file.length()==0L){
+            val bitmap=Bitmap.createBitmap(360,720,Bitmap.Config.ARGB_8888)
+            val temp=File(file.parentFile,file.name+".tmp")
+            try{
+                VxMotionRenderer.draw(android.graphics.Canvas(bitmap),360f,720f,preset,.22)
+                temp.outputStream().use{check(bitmap.compress(Bitmap.CompressFormat.PNG,100,it)){"Hintergrund konnte nicht gespeichert werden."}}
+                check(temp.renameTo(file)){"Hintergrund konnte nicht übernommen werden."}
+            }finally{bitmap.recycle();temp.delete()}
         }
         return file.absolutePath
     }

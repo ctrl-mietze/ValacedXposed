@@ -12,10 +12,10 @@ import org.json.JSONArray
 
 /** A miniature Discord layout, not a screenshot; uses actual resolved palette. */
 internal class DiscordThemePreview(context:Context, private val colors:IntArray,
-    private val animated:Boolean=false):View(context) {
+    private val animated:Boolean=false, private val motion:VxMotionPresets.Preset?=null):View(context) {
     private val p=Paint(Paint.ANTI_ALIAS_FLAG)
     private var visible=false
-    override fun onVisibilityAggregated(isVisible:Boolean){super.onVisibilityAggregated(isVisible);visible=isVisible;if(animated&&isVisible)invalidate()}
+    override fun onVisibilityAggregated(isVisible:Boolean){super.onVisibilityAggregated(isVisible);visible=isVisible;if((animated||motion!=null)&&isVisible)invalidate()}
     override fun onDraw(canvas:Canvas){
         super.onDraw(canvas)
         val w=width.toFloat();if(w<=0)return
@@ -26,7 +26,14 @@ internal class DiscordThemePreview(context:Context, private val colors:IntArray,
         fun rect(x:Float,y:Float,r:Float,b:Float,color:Int,radius:Float=0f){p.shader=null;p.color=color;canvas.drawRoundRect(x,y,r,b,radius,radius,p)}
         fun txt(s:String,x:Float,y:Float,size:Float,c:Int,bold:Boolean=false){p.shader=null;p.color=c;p.textSize=size;p.typeface=Typeface.create("sans-serif",if(bold)Typeface.BOLD else Typeface.NORMAL);canvas.drawText(s,x,y,p)}
         rect(0f,0f,320f,h,bg,12f)
-        if(animated){
+        if(motion!=null){
+            canvas.save()
+            val clip=android.graphics.Path().apply{addRoundRect(0f,0f,320f,h,12f,12f,android.graphics.Path.Direction.CW)}
+            canvas.clipPath(clip)
+            val phase=(android.os.SystemClock.uptimeMillis()%(motion.duration*2)).toDouble()/(motion.duration*2)
+            VxMotionRenderer.draw(canvas,320f,h,motion,phase)
+            canvas.restore()
+        }else if(animated){
             val phase=(android.os.SystemClock.uptimeMillis()%10000L)/10000f
             val shift=(kotlin.math.sin(phase*6.2831853).toFloat()+1f)*.5f
             p.shader=LinearGradient(shift*160f,0f,320f-shift*100f,h,intArrayOf(bg,VxThemes.blend(bg,accent,.20f),side),null,Shader.TileMode.CLAMP)
@@ -55,7 +62,7 @@ internal class DiscordThemePreview(context:Context, private val colors:IntArray,
         rect(88f,h-24f,311f,h-6f,input,7f)
         txt("+    Nachricht schreiben …",94f,h-12f,8f,muted)
         canvas.restore()
-        if(animated&&visible&&isShown)postInvalidateDelayed(50)
+        if((animated||motion!=null)&&visible&&isShown&&getLocalVisibleRect(android.graphics.Rect()))postInvalidateDelayed(66)
     }
     companion object{
         fun palette(values:JSONArray?,fallback:VxTheme):IntArray{

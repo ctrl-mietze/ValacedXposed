@@ -4,10 +4,13 @@ import { pList, registerInternalPlugin } from '@valenced/plugins/_'
 import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import { after } from '@valenced/patcher'
-import { createElement, cloneElement, isValidElement, useEffect, useRef } from 'react'
-import { Animated, AppState, Easing, View } from 'react-native'
+import { Children, createElement, cloneElement, isValidElement, useEffect, useRef } from 'react'
+import { Animated, AppState, Easing, AccessibilityInfo, StyleSheet } from 'react-native'
 import manifest from './manifest.json'
 import { palettes, ownTheme, previewPalette, previewTokens } from './palettes'
+import { motionPresets, motionById, motionIdFromUri } from './motion-presets'
+const allPalettes=[...palettes,...motionPresets.map(p=>p.palette)]
+const renderedMotion=new Set<string>()
 
 type ThemeData = { name: string; description: string; colors: any; background?: any }
 type FontData = {name:string; description:string; files:Record<string,string>}
@@ -89,7 +92,7 @@ function registerAll(store:any,force=false){
     store.registerProvider(ID,{name:'Veyra Studio'})
     store.registerGroup(ID,OWN,{name:'Veyra Studio',description:'Eigene Discord-Designs'})
     store.registerGroup(ID,GROUP,{name:'Importiert',description:'Legacy-Themes und Fonts'})
-    for(const p of palettes){
+    for(const p of allPalettes){
         const theme=ownTheme(p)
         store.registerTheme(ID,OWN,p.id,{name:theme.name,description:theme.description,getColors:()=>theme.colors})
     }
@@ -100,7 +103,7 @@ function registerAll(store:any,force=false){
 }
 const tokens=previewTokens
 function previewOf(store:any,plugin:string,group:string,id:string,item:any){
-    const own=plugin===ID&&group===OWN?palettes.find(p=>p.id===id):undefined
+    const own=plugin===ID&&group===OWN?allPalettes.find(p=>p.id===id):undefined
     const fallback=own?previewPalette(own):undefined
     try{
         const colors=store.previewColorsOf(plugin,group,id,'dark',tokens)
@@ -136,7 +139,7 @@ function snapshot(store:any){
     const active=selected.colors
     const applied=active?.values?.semantic?.dark
     const activeColors=applied?tokens.map(k=>normalizedColor(applied[k])??null):[]
-    return {themeState:{ready:true,entries,background:bg,
+    return {themeState:{ready:true,entries,background:bg,motionRendered:[...renderedMotion],
         activeTheme:active?{plugin:active.plugin,group:active.group,id:active.theme,colors:activeColors}:null,
         defaults:{themes:!selected.colors,fontPacks:!Object.keys(selected.fonts?.families??{}).length,iconPacks:!selected.icons,emojiPacks:!selected.emoji}}}
 }
@@ -145,7 +148,7 @@ async function command(op:string,json:string){
     if(!store)return snapshot(null)
     await load();registerAll(store);patchMotion()
     const selection=store.themesStore.getState().selected?.colors
-    if(selection?.plugin===ID&&selection.group===OWN&&palettes.some(p=>p.id===selection.theme)){
+    if(selection?.plugin===ID&&selection.group===OWN&&allPalettes.some(p=>p.id===selection.theme)){
         // Upstream registerTheme refreshes selected themes asynchronously.
         // Explicit selection here also handles early startup token initialization.
         await store.selectTheme(ID,OWN,selection.theme)
@@ -179,35 +182,71 @@ async function command(op:string,json:string){
         const clamp=(n:unknown,fallback:number,max=1)=>typeof n==='number'?Math.max(0,Math.min(max,n)):fallback
         const source=data.source
         if(!['theme','custom','none'].includes(source))throw new Error('Ungültige Hintergrundquelle.')
+        if(data.motionTheme===true){
+            const preset=typeof data.motion==='string'?motionById.get(data.motion):undefined
+            if(source!=='custom'||!preset||typeof data.path!=='string'||motionIdFromUri('file://'+data.path)!==preset.id)
+                throw new Error('Ungültiges Motion-Theme.')
+            if(!store.themesStore.getState().groups[ID]?.[OWN]?.themes?.[preset.palette.id])
+                throw new Error('Motion-Farbpalette nicht registriert.')
+            await store.selectTheme(ID,OWN,preset.palette.id)
+        }
         await store.setBackgroundSettings({source,...(source==='custom'?{path:data.path}:{}),opacity:clamp(data.opacity,1),blur:clamp(data.blur,0,40),dimming:clamp(data.dimming,.7)})
     }else if(op!=='theme_snapshot')throw new Error('Unbekannte Theme-Aktion.')
     return snapshot(store)
 }
 
-const motionColors:Record<string,string[]>={aurora:['#8d67dc','#40d8be'],bloom:['#e88ab6','#9c69db'],eclipse:['#5382de','#9272df']}
-function MotionLayer({styleName,opacity}:{styleName:string,opacity:number}){
+/** Animates the actual background image in place. No tint over chat media,
+ * no extra opaque overlay, and no hook-count change to Discord components. */
+function MotionImage({id,imageProps}:{id:string,imageProps:any}){
+    const preset=motionById.get(id)!
     const phase=useRef(new Animated.Value(0)).current
     useEffect(()=>{
+        let alive=true
+        let reduced=false
+        let active=AppState.currentState??'active'
         let animation:ReturnType<typeof Animated.loop>|undefined
-        const start=(state:string)=>{
+        const update=()=>{
             animation?.stop()
-            if(state!=='active')return
-            animation=Animated.loop(Animated.sequence([
-                Animated.timing(phase,{toValue:1,duration:6200,easing:Easing.inOut(Easing.sin),useNativeDriver:true,isInteraction:false}),
-                Animated.timing(phase,{toValue:0,duration:6200,easing:Easing.inOut(Easing.sin),useNativeDriver:true,isInteraction:false}),
-            ]));animation.start()
+            if(!alive)return
+            if(reduced){phase.setValue(0);return}
+            if(active!=='active')return
+            phase.setValue(0)
+            animation=Animated.loop(Animated.timing(phase,{
+                toValue:1,duration:preset.duration*2,easing:Easing.linear,
+                useNativeDriver:true,isInteraction:false
+            }))
+            animation.start()
         }
-        start(AppState.currentState??'active')
-        const sub=AppState.addEventListener('change',start)
-        return()=>{animation?.stop();sub.remove()}
-    },[phase])
-    const colors=motionColors[styleName]??motionColors.aurora!
-    return createElement(View,{pointerEvents:'none',style:{position:'absolute',top:0,left:0,right:0,bottom:0,overflow:'hidden'}},
-        ...colors.map((color,i)=>createElement(Animated.View,{key:i,style:{position:'absolute',width:380,height:380,borderRadius:190,
-            top:i?120:-110,left:i?80:-140,backgroundColor:color,
-            opacity:phase.interpolate({inputRange:[0,1],outputRange:[.06*opacity,.28*opacity]}),
-            transform:[{translateX:phase.interpolate({inputRange:[0,1],outputRange:i?[0,-90]:[0,110]})},
-                {translateY:phase.interpolate({inputRange:[0,1],outputRange:i?[0,-40]:[0,70]})}]}})))
+        const subscription=AppState.addEventListener('change',state=>{active=state;update()})
+        const accessibility=AccessibilityInfo?.addEventListener?.('reduceMotionChanged',value=>{reduced=value;update()})
+        Promise.resolve(AccessibilityInfo?.isReduceMotionEnabled?.()).then(value=>{
+            if(!alive)return
+            reduced=value===true;update()
+        }).catch(()=>{if(alive)update()})
+        if(!renderedMotion.has(id)){
+            renderedMotion.add(id)
+            nativeLoggingHook('[ValancedX Motion] Rendered '+id,1)
+        }
+        return()=>{alive=false;animation?.stop();subscription.remove();accessibility?.remove()}
+    },[phase,id,preset.duration])
+    const flat=StyleSheet.flatten(imageProps.style)??{}
+    const width=typeof flat.width==='number'?flat.width:360
+    const height=typeof flat.height==='number'?flat.height:720
+    const frames=[0,.25,.5,.75,1]
+    const x=preset.motion==='pulse'?[0,0,0,0,0]:
+        preset.motion==='sweep'?[-.08,0,.08,0,-.08]:
+        preset.motion==='orbit'?[0,.075,0,-.075,0]:[0,.065,.09,.035,0]
+    const y=preset.motion==='orbit'?[-.055,0,.055,0,-.055]:
+        preset.motion==='drift'?[0,-.04,0,.04,0]:[0,0,0,0,0]
+    const zoom=preset.motion==='pulse'?[1.04,1.13,1.23,1.13,1.04]:[1.27,1.29,1.30,1.29,1.27]
+    return createElement(Animated.Image,{
+        ...imageProps,
+        style:[imageProps.style,{transform:[
+            {translateX:phase.interpolate({inputRange:frames,outputRange:x.map(v=>v*width)})},
+            {translateY:phase.interpolate({inputRange:frames,outputRange:y.map(v=>v*height)})},
+            {scale:phase.interpolate({inputRange:frames,outputRange:zoom})},
+        ]}]
+    })
 }
 function patchMotion(){
     if(motionCleanup)return
@@ -215,14 +254,18 @@ function patchMotion(){
     cleanups.push(getModules(withProps<any>('CustomThemedGradient','validateColors'),module=>{
         if(typeof module.default!=='function')return
         cleanups.push(after(module,'default',(result:any)=>{
-            // Only decorate the exact backing image produced by Valenced's own
-            // custom background pipeline. Never modify ordinary Discord screens.
             if(!isValidElement(result))return result
-            const props:any=result.props,child=props?.children
-            const uri=child?.props?.source?.uri
-            const match=typeof uri==='string'&&uri.match(/\/veyra-motion-(aurora|bloom|eclipse)\.png$/)
-            if(!match)return result
-            return cloneElement(result as any,undefined,child,createElement(MotionLayer,{styleName:match[1],opacity:Number(child.props.style?.opacity??1)}))
+            const props:any=result.props
+            let changed=false
+            const children=Children.map(props?.children,(child:any)=>{
+                if(!isValidElement(child))return child
+                const imageProps:any=child.props
+                const id=motionIdFromUri(imageProps?.source?.uri)
+                if(!id)return child
+                changed=true
+                return createElement(MotionImage,{key:'veyra-motion-'+id,id,imageProps})
+            })
+            return changed?cloneElement(result as any,undefined,children):result
         }))
     },{cached:false}))
     motionCleanup=()=>{for(const cleanup of cleanups.reverse())try{cleanup()}catch{};motionCleanup=undefined}

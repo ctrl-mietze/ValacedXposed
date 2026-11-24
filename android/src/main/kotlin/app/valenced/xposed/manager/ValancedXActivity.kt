@@ -1189,9 +1189,11 @@ class ValancedXActivity : Activity() {
     }
     private fun builtinPalette(id:String):JSONArray=VxDiscordPalettes.preview(id)
     private fun backgroundScreen(parent:LinearLayout,ready:Boolean){
-        eyebrow(parent,"HINTERGRUND STUDIO")
+        eyebrow(parent,"VEYRA MOTION STUDIO")
         val background=discordThemeState?.optJSONObject("background")?:JSONObject()
         val path=background.optString("path")
+        val currentMotion=VxMotionPresets.fromPath(path)
+        val activePalette=discordThemeState?.optJSONObject("activeTheme")?.optString("id").orEmpty()
         var opacity=background.optDouble("opacity",1.0)
         var blur=background.optInt("blur",0)
         var dim=background.optDouble("dimming",.7)
@@ -1202,7 +1204,7 @@ class ValancedXActivity : Activity() {
         }
         card(parent,top=8){
             add(this,label("Hintergrund-Einstellungen",17f,whiteColor,true))
-            add(this,label(if(path.isNotBlank())"Aktiv: "+(path.substringAfterLast('/').take(70)) else "Quelle: "+background.optString("source","theme"),12f,mutedColor),top=4)
+            add(this,label(if(currentMotion!=null)"Aktiv: Veyra "+currentMotion.name else if(path.isNotBlank())"Aktiv: "+(path.substringAfterLast('/').take(70)) else "Quelle: "+background.optString("source","theme"),12f,mutedColor),top=4)
             fun slider(title:String,value:Int,max:Int,set:(Int)->Unit){
                 val text=label(title+" · "+value,12f,whiteColor,true)
                 add(this,text,top=10)
@@ -1219,7 +1221,7 @@ class ValancedXActivity : Activity() {
             slider("Unschärfe",blur,40){blur=it}
             slider("Abdunklung %",(dim*100).toInt(),100){dim=it/100.0}
             add(this,button("Aktuelle Werte anwenden",true){
-                val motion=Regex("veyra-motion-(aurora|bloom|eclipse)\\.png$").find(path)?.groupValues?.get(1)
+                val motion=VxMotionPresets.fromPath(path)?.id
                 val source=background.optString("source","theme")
                 val data=payload(source)
                 if(source=="custom"){if(motion!=null)data.put("motion",motion) else data.put("path",path)}
@@ -1228,17 +1230,38 @@ class ValancedXActivity : Activity() {
             twoActions(this,button("Theme-Hintergrund"){apply(payload("theme"))},button("Kein Hintergrund"){apply(payload("none"))})
             add(this,button("+ Bild-URL"){urlPrompt("Hintergrundbild","https://…/image.png"){url->apply(payload("custom").put("path",url))}},top=8)
         }
-        eyebrow(parent,"ANIMIERTE DESIGNS")
-        for((id,name,palette) in listOf(Triple("aurora","Veyra Aurora","neon"),Triple("bloom","Veyra Bloom Motion","bloom"),Triple("eclipse","Veyra Eclipse Motion","eclipse"))){
+        eyebrow(parent,"ANIMIERTE THEMES · "+VxMotionPresets.all.size)
+        add(parent,label("Ein Theme verbindet eine eigene Farbpalette mit einem animierten Hintergrund. Alternativ nur den Hintergrund übernehmen.",12f,mutedColor),top=6)
+        val designs=VxMotionPresets.all.sortedByDescending{it.id==currentMotion?.id}
+        for(preset in designs){
             card(parent,top=9){
+                val id=preset.id
                 tag="vx-motion-"+id
-                add(this,label(name,17f,whiteColor,true))
-                add(this,label("Animierter Farbverlauf · native RN-Animation",11f,accentColor),top=4)
-                themePreview(this,builtinPalette(palette),true)
-                add(this,button(if(path.endsWith("veyra-motion-"+id+".png"))"Erneut anwenden" else "Anwenden",true){apply(payload("custom").put("motion",id))},top=9)
+                val bgActive=currentMotion?.id==id
+                val fullActive=bgActive&&activePalette=="motion-"+id
+                val title=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}
+                val labels=column()
+                add(labels,label("Veyra "+preset.name,17f,whiteColor,true))
+                add(labels,label(preset.description,11f,mutedColor),top=4)
+                title.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
+                if(bgActive)title.addView(label(if(fullActive)"Aktiv" else "Hintergrund aktiv",10f,mintColor,true))
+                add(this,title)
+                add(this,label(when(preset.motion){"orbit"->"ORBIT";"pulse"->"PULSE";"sweep"->"SWEEP";else->"DRIFT"}+"  ·  "+(preset.duration*2/1000)+" s Loop",10f,android.graphics.Color.parseColor(preset.accent),true),top=6)
+                addView(DiscordThemePreview(this@ValancedXActivity,DiscordThemePreview.palette(preset.preview(),currentTheme),true,preset),
+                    LinearLayout.LayoutParams(-1,dp(168)).apply{topMargin=dp(10)})
+                val swatches=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}
+                for(color in listOf(preset.base,preset.glowA,preset.glowB,preset.accent)){
+                    val v=View(this@ValancedXActivity).apply{background=rounded(android.graphics.Color.parseColor(color),borderColor,6)}
+                    swatches.addView(v,LinearLayout.LayoutParams(dp(24),dp(8)).apply{rightMargin=dp(5)})
+                }
+                add(this,swatches,top=8)
+                fun motionPayload(full:Boolean)=JSONObject().put("source","custom").put("motion",id)
+                    .put("motionTheme",full).put("opacity",1.0).put("blur",0).put("dimming",preset.dim)
+                add(this,button(if(fullActive)"Theme erneut anwenden" else "Theme anwenden",true){apply(motionPayload(true))},top=9)
+                add(this,button("Nur Hintergrund"){apply(motionPayload(false))},top=6)
             }
         }
-        add(parent,label("Die Animation läuft nur bei aktivem Discord. MP4/WebM werden noch nicht unterstützt.",11f,mutedColor),top=12)
+        add(parent,label("Animationen werden bei inaktivem Discord angehalten. Die Android-Einstellung für reduzierte Bewegung wird berücksichtigt.",11f,mutedColor),top=12)
     }
 
     private var themePage=0
@@ -1281,10 +1304,21 @@ class ValancedXActivity : Activity() {
         }
         val kinds=listOf("themes" to "Farben","fontPacks" to "Fonts","iconPacks" to "Icons","emojiPacks" to "Emoji","backgrounds" to "Hintergrund")
         val kindIndex=kinds.indexOfFirst{it.first==themeKind}.coerceAtLeast(0)
-        segmented(parent,kinds.take(4).map{it.second},kindIndex.coerceAtMost(3),{i->themeKind=kinds[i].first;render(preserveScroll=true)})
-        add(parent,button(if(themeKind=="backgrounds")"Hintergrund-Studio · Aktiv" else "Hintergrund-Studio",themeKind=="backgrounds"){
-            themeKind="backgrounds";render(preserveScroll=true)
-        },top=7)
+        // The fourth main category is the actual Theme Studio. Emoji packs
+        // retain their own secondary control, never a false selected state.
+        val mainKinds=listOf("themes","fontPacks","iconPacks","backgrounds")
+        segmented(parent,listOf("Farben","Fonts","Icons","Themes"),mainKinds.indexOf(themeKind),{i->
+            themeKind=mainKinds[i];render(preserveScroll=true)
+        })
+        val extras=LinearLayout(this).apply{gravity=Gravity.END}
+        extras.addView(label(if(themeKind=="emojiPacks")"Emoji-Pakete · Aktiv" else "Emoji-Pakete",12f,
+            if(themeKind=="emojiPacks")accentColor else mutedColor,true).apply{
+            setPadding(dp(12),dp(8),dp(12),dp(8))
+            background=interactive(if(themeKind=="emojiPacks")selectedSurface else surfaceColor,
+                if(themeKind=="emojiPacks")selectedStroke else borderColor,12)
+            setOnClickListener{themeKind="emojiPacks";render(preserveScroll=true)}
+        })
+        add(parent,extras,top=6)
         if(themeKind=="backgrounds"){backgroundScreen(parent,ready);return}
         val entries=state?.optJSONArray("entries")?:JSONArray()
         val selected=(0 until entries.length()).mapNotNull{entries.optJSONObject(it)}.filter{it.optString("kind")==themeKind}
