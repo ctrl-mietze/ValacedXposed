@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.31 — BitChord Presence connection
+
+- Automatically uses the logged-in Discord client and its existing activity dispatcher; no separate credential setup.
+- Text activity is submitted before optional artwork. The plugin uses the client's asset utility first and retries after connection events.
+- Distinguishes media connection, playback state, activity submission and local observation; optional paused activity.
+- Retains Stereo Call 1.1.0 and all existing sources, themes and settings.
+
 ## 1.0.30 — Native Stereo Call
 
 - Stereo Call 1.1.0 moves routing control to process-local Android AudioManager hooks, with Automatic / A2DP phone microphone / LE modes.

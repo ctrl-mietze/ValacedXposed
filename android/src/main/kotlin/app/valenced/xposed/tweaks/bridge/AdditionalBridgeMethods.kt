@@ -8,6 +8,7 @@ import app.valenced.xposed.tweak
 import app.valenced.xposed.tweaks.plugins.ManagerPluginWorker
 import app.valenced.xposed.tweaks.plugins.ManagerThemeRequests
 import app.valenced.xposed.tweaks.plugins.CompilerRuntimeState
+import app.valenced.xposed.tweaks.plugins.BitChordPresenceStatus
 import java.io.File
 import android.net.Uri
 import app.valenced.plugins.PluginStatesStore
@@ -17,6 +18,10 @@ import app.valenced.xposed.BuildConfig
  * `valenced.fs.*` + `valenced.app.*` bridge methods.
  */
 val additionalBridgeMethods by tweak {
+    registerNativeMethod("vexcord.bitchord.status") { args ->
+        BitChordPresenceStatus.report(args.getOrNull(0) as? String ?: "")
+        null
+    }
     registerNativeMethod("vexcord.runtime.info") {
         mapOf("name" to "Vexcord","apiVersion" to 1,"version" to app.valenced.xposed.BuildConfig.VERSION_NAME,
             "platform" to "android","compatibility" to "valenced-v1")

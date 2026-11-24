@@ -241,6 +241,7 @@ internal object ManagerPluginWorker {
                 .put("enabled", enabled).put("failed", id in pluginRegistry.discoveryFailures || id in pluginRegistry.bootErrors)
                 .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: "")
                 .put("compilerRuntime", CompilerRuntimeState.snapshot(id))
+                .put("presenceRuntime",if(id=="vexcord.bitchord-presence")BitChordPresenceStatus.snapshot() else null)
                 .put("artifactSha256",SourcesStore[id]?.hash ?: "")
                 .put("repo", SourcesStore[id]?.repo ?: ""))
         }

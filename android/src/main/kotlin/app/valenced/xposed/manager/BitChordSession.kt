@@ -100,7 +100,7 @@ internal object BitChordSession {
             val advance=if(playing&&state.lastPositionUpdateTime>0L)
                 ((SystemClock.elapsedRealtime()-state.lastPositionUpdateTime).coerceAtLeast(0)*state.playbackSpeed).toLong() else 0L
             val position=(state.position.coerceAtLeast(0L)+advance).coerceIn(0L,if(duration>0)duration else 24*60*60*1000L)
-            snapshot=JSONObject().put("status","connected").put("playing",playing).put("title",title).put("artist",artist)
+            snapshot=JSONObject().put("status","connected").put("playing",playing).put("playbackState",state.state).put("title",title).put("artist",artist)
                 .put("album",album).put("art",art).put("mediaUri",text(MediaMetadata.METADATA_KEY_MEDIA_URI,1000))
                 .put("duration",duration).put("position",position).put("sampleTime",System.currentTimeMillis()).toString()
         }catch(_:Exception){disconnect("unavailable")}

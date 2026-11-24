@@ -1607,6 +1607,13 @@ class ValancedXActivity : Activity() {
                 append("\nAutor: ").append(item.optString("author"))
                 if(item.optString("repo").isNotBlank())append("\nQuelle: ").append(item.optString("repo"))
                 if(runtime!=null)append("\n\n").append(runtimeLabel(item)).append("\n").append(runtime.optJSONArray("bound")?.toString().orEmpty())
+                item.optJSONObject("presenceRuntime")?.let{presence->
+                    append("\n\nBitChord-Verbindungsdiagnose")
+                    for((title,key) in listOf("Discord" to "discord","Mediendienst" to "media","Aktivität" to "publication","Cover" to "cover")){
+                        append("\n").append(title).append(": ").append(presence.optString(key))
+                    }
+                    append("\nLokale Diagnose · keine Bestätigung der Fremdanzeige.")
+                }
                 for(alias in aliases)append("\n\nVencord: ").append(alias.title).append("\n").append(alias.rule.adaptation).append("\n").append(alias.rule.limitation)
             }
             AlertDialog.Builder(this@ValancedXActivity).setTitle(item.optString("name",id)).setMessage(details).setPositiveButton("Schließen",null).show()

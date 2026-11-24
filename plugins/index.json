@@ -5,17 +5,30 @@
   "plugins": {
     "vexcord.bitchord-presence": {
       "name": "BitChord Presence",
-      "description": "Shows BitChord playback as a listening activity with title, artist, album, optional public cover, time progress and track link.",
+      "description": "Automatic BitChord listening activity using the current Discord session, live connection diagnostics, cover and optional paused activity. Vexcord 1.0.31+.",
       "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
       "icon": "MusicNoteIcon",
       "channels": {
-        "latest": "1.0.0"
+        "latest": "1.1.0"
       },
       "versions": {
         "1.0.0": {
           "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.bitchord-presence@1.0.0.zip",
           "sha256": "12549631a36098ce7d92d5c1ba86492576cfbdc53bf390eb78543dcc180f9d87",
           "size": 4308,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.1.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.bitchord-presence@1.1.0.zip",
+          "sha256": "c3060820fc92862c9b5a29409c53ce11871ea28e34d478ebddea4ef4660dbba8",
+          "size": 5998,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"
