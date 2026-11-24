@@ -189,10 +189,7 @@ internal object ManagerPluginWorker {
                 invoke("installLegacy",data.getString("token"))
                 return snapshot("Legacy-Plugin importiert. Unter Installiert gezielt aktivieren.")
             }
-            "theme_snapshot", "theme_import", "theme_apply", "theme_reset", "theme_remove" -> {
-                if (!themesReady.get() || !ValencedBridgeRegistry.isReady) {
-                    return snapshot().put("themeState",JSONObject().put("ready",false).put("message","Discord-Theme-Bridge noch nicht bereit."))
-                }
+            "theme_snapshot", "theme_import", "theme_apply", "theme_reset", "theme_remove", "theme_font_import", "theme_background" -> {
                 if(op=="theme_import"){
                     val url=validateUrl(data.getString("url"))
                     val fetched=httpClient.getWithETag(url,null,15_000L) as? ETagFetchResult.Fetched
@@ -200,12 +197,20 @@ internal object ManagerPluginWorker {
                     require(fetched.bytes.size in 1..250_000) {"Theme-JSON ist zu groß."}
                     data.put("url",url).put("theme",JSONObject(fetched.bytes.decodeToString()))
                 }
-                val raw=withTimeout(30_000L){
-                    ValencedBridgeRegistry.callJSMethod("valancedx.manager.themes",listOf(op,data.toString()))
-                } as? String ?: error("Ungültige Theme-Antwort.")
-                val result=JSONObject(raw)
+                if(op=="theme_font_import"){
+                    val url=validateUrl(data.getString("url"))
+                    data.put("url",url).put("pack",ManagerThemeAssets.importFonts(context,url))
+                }
+                if(op=="theme_background"&&data.optString("source")=="custom"){
+                    val motion=data.optString("motion")
+                    val path=if(motion.isNotBlank())ManagerThemeAssets.motionPath(context,motion)
+                        else validateUrl(data.getString("path"))
+                    data.put("path",path)
+                }
+                val result=ManagerThemeRequests.request(op,data)
                 if(result.has("error"))return result
-                return snapshot().put("themeState",result.getJSONObject("themeState"))
+                return snapshot(if(op=="theme_snapshot")"" else "Theme-Einstellung gespeichert.")
+                    .put("themeState",result.getJSONObject("themeState"))
             }
             "snapshot" -> return snapshot()
             "refresh" -> {

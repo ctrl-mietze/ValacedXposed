@@ -89,10 +89,14 @@ class ValancedXActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         readTheme()
-        currentTab = (savedInstanceState?.getInt("tab") ?: 0).coerceIn(0, tabs.lastIndex)
-        pluginPage = (savedInstanceState?.getInt("pluginPage") ?: 0).coerceIn(0,3)
-        themePage = (savedInstanceState?.getInt("themePage") ?: 0).coerceIn(0,1)
-        themeKind = savedInstanceState?.getString("themeKind") ?: "themes"
+        if(pluginData==null)pluginData=runCatching {
+            JSONObject(java.io.File(filesDir,"manager-catalog.json").readText())
+        }.getOrNull()
+        discordThemeState=pluginData?.optJSONObject("themeState")
+        currentTab = (savedInstanceState?.getInt("tab") ?: prefs.getInt("manager_tab",0)).coerceIn(0, tabs.lastIndex)
+        pluginPage = (savedInstanceState?.getInt("pluginPage") ?: prefs.getInt("manager_plugin_page",0)).coerceIn(0,3)
+        themePage = (savedInstanceState?.getInt("themePage") ?: prefs.getInt("manager_theme_page",0)).coerceIn(0,1)
+        themeKind = savedInstanceState?.getString("themeKind") ?: prefs.getString("manager_theme_kind","themes") ?: "themes"
         pluginQuery = savedInstanceState?.getString("pluginQuery").orEmpty()
         pluginJob = savedInstanceState?.getString("pluginJob")
         pluginTarget = savedInstanceState?.getString("pluginTarget")
@@ -109,10 +113,13 @@ class ValancedXActivity : Activity() {
         connectionGranted = grantConnection()
         prefs.registerOnSharedPreferenceChangeListener(listener)
         render(preserveScroll = true)
-        if (pluginJob != null) mainHandler.post(pluginPoll)
+        if (pluginJob != null) {mainHandler.removeCallbacks(pluginPoll);mainHandler.post(pluginPoll)}
+        else if(currentTab==2&&pluginData==null)pluginAction("snapshot")
+        else if(currentTab==3&&themePage==0)pluginAction("theme_snapshot")
     }
 
     override fun onPause() {
+        prefs.edit().putInt("manager_tab",currentTab).putInt("manager_plugin_page",pluginPage).putInt("manager_theme_page",themePage).putString("manager_theme_kind",themeKind).apply()
         prefs.unregisterOnSharedPreferenceChangeListener(listener)
         mainHandler.removeCallbacks(refresh)
         mainHandler.removeCallbacks(pluginPoll)
@@ -345,7 +352,7 @@ class ValancedXActivity : Activity() {
                 if (connectionGranted) accentColor else warmColor)
             statusRow(this, "Recovery", if (prefs.getBoolean("safe_mode", false)) "Aktiv" else "Aus",
                 if (prefs.getBoolean("safe_mode", false)) warmColor else mutedColor)
-            add(this, button("Discord öffnen", primary = true) { openDiscord() }, top = 12)
+            twoActions(this,button("Discord öffnen",true){openDiscord()},button("Neu starten"){restartDiscord()},top=12)
         }
         eyebrow(parent, "Aktivität")
         stats(parent)
@@ -652,6 +659,7 @@ class ValancedXActivity : Activity() {
             val id = pluginJob ?: return
             val raw = ManagerPluginMailbox.result(id)
             if (raw == null) {
+                updateBusyStrip()
                 updateDiscoveryControls()
                 mainHandler.postDelayed(this, 350)
                 return
@@ -663,7 +671,7 @@ class ValancedXActivity : Activity() {
             if (result.has("error")) {
                 pluginNote = result.optString("error")
                 pluginFailedTarget = target
-                if (target != null) Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_LONG).show()
             } else if (result.has("legacyPreview")) {
                 val item=result.getJSONObject("legacyPreview")
                 pluginNote="Legacy-Manifest geprüft."
@@ -676,7 +684,7 @@ class ValancedXActivity : Activity() {
             } else if (result.has("themeState")) {
                 discordThemeState=result.getJSONObject("themeState")
                 if(result.has("available"))pluginData=result
-                pluginNote=discordThemeState?.optString("message").orEmpty()
+                pluginNote=discordThemeState?.optString("message").orEmpty().ifBlank{result.optString("message")}
             } else if (result.has("sourcePreview")) {
                 val source=result.getJSONObject("sourcePreview")
                 pluginNote="Index erfolgreich geprüft."
@@ -708,11 +716,24 @@ class ValancedXActivity : Activity() {
                     pluginNote = "Installationsplan erstellt."
                 }
             } else {
-                pluginData = result
+                if(result.has("available")){
+                    val oldTheme=discordThemeState
+                    pluginData=result
+                    if(oldTheme!=null)pluginData?.put("themeState",oldTheme)
+                }
                 pluginFailedTarget = null
                 pluginNote = result.optString("message")
                 if (target != null) Toast.makeText(this@ValancedXActivity, pluginNote, Toast.LENGTH_SHORT).show()
             }
+            pluginData?.let { snapshot ->
+                if(snapshot.has("available"))runCatching {
+                    val file=java.io.File(filesDir,"manager-catalog.json")
+                    val temp=java.io.File(filesDir,"manager-catalog.tmp")
+                    temp.writeText(snapshot.toString());temp.renameTo(file)
+                }
+            }
+            updateBusyStrip()
+            lastActionKey=null
             if (currentTab == 3) render(preserveScroll=true)
             if (currentTab == 2) {
                 if (target != null && pluginPage == 1 && discoveryControls.isNotEmpty()) {
@@ -726,11 +747,14 @@ class ValancedXActivity : Activity() {
     }
 
     private fun pluginAction(operation: String, data: JSONObject = JSONObject()) {
-        if (pluginJob != null) return
+        if (pluginJob != null || restartRunning) {
+            Toast.makeText(this,"Eine Aktion läuft bereits.",Toast.LENGTH_SHORT).show();return
+        }
         connectionGranted = grantConnection()
         runCatching { ManagerPluginMailbox.submit(operation, data) }
             .onSuccess {
                 pluginJob = it
+                lastActionKey=actionKey(operation,data)
                 pluginTarget = if (operation == "install_direct" && currentTab==2 && pluginPage==1) pluginKey(data.optString("id"), data.optString("repo")) else null
                 pluginFailedTarget = null
                 pluginNote = "Discord verarbeitet die Aktion …"
@@ -740,11 +764,8 @@ class ValancedXActivity : Activity() {
                 pluginNote = it.message.orEmpty()
                 Toast.makeText(this, pluginNote, Toast.LENGTH_LONG).show()
             }
-        if (currentTab == 3) render(preserveScroll=true)
-        if (currentTab == 2) {
-            if (operation == "install_direct" && pluginPage == 1) updateDiscoveryControls()
-            else render(preserveScroll = true)
-        }
+        updateBusyStrip()
+        updateDiscoveryControls()
     }
 
     private fun addPluginSource(url: String) {
@@ -885,100 +906,268 @@ class ValancedXActivity : Activity() {
         add(parent,label("Themes ändern die Oberfläche von ValancedX, nicht das Discord-Design.",12f,mutedColor),top=12)
     }
 
-    private fun sourceScreen(parent: LinearLayout) {
-        val repos=pluginData?.optJSONArray("repos") ?: JSONArray()
-        val items=(0 until repos.length()).mapNotNull { repos.optJSONObject(it) }
-        val urls=items.map { it.optString("url") }.toSet()
-        val active=items.count { it.optBoolean("enabled") }
-        card(parent,top=12) {
-            val header=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
-            header.addView(VxIcon(this@ValancedXActivity,"source",accentColor),LinearLayout.LayoutParams(dp(28),dp(28)).apply { rightMargin=dp(10) })
-            header.addView(label("Repository Hub",22f,whiteColor,true),LinearLayout.LayoutParams(0,-2,1f))
-            add(this,header)
-            add(this,label("Verwalte die Herkunft deiner Plugins.",13f,mutedColor),top=6)
-            val counts=LinearLayout(this@ValancedXActivity)
-            for ((number,caption) in listOf(items.size to "Quellen",active to "Aktiv",items.filter { it.optBoolean("enabled") }.sumOf { it.optInt("count") } to "Einträge")) {
-                val tile=column().apply {
-                    setPadding(dp(12),dp(10),dp(8),dp(10))
-                    background=rounded(raisedColor,borderColor,14)
-                    add(this,label(number.toString(),23f,accentColor,true))
-                    add(this,label(caption,11f,mutedColor),top=3)
-                }
-                counts.addView(tile,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),0,dp(3),0) })
-            }
-            add(this,counts,top=15)
-            twoActions(this,button("+ Quelle",true) { customPluginSource() },button("Alle aktualisieren") { pluginAction("refresh") })
+
+    private var busyLabel:TextView?=null
+    private var busyProgress:ProgressBar?=null
+    private var busyCancel:TextView?=null
+    private var restartRunning=false
+    private var lastActionKey:String?=null
+    private val actionControls=mutableMapOf<String,TextView>()
+    private fun actionKey(op:String,data:JSONObject):String=op+"|"+data.optString("id")+"|"+data.optString("url")+"|"+data.optString("repo")+"|"+data.optString("motion")
+    private fun operationButton(title:String,op:String,data:JSONObject=JSONObject(),primary:Boolean=false):TextView {
+        val key=actionKey(op,data)
+        return button(title,primary) { pluginAction(op,data) }.apply {
+            tag="vx-action-"+key
+            maxLines=1
+            ellipsize=android.text.TextUtils.TruncateAt.END
+            actionControls[key]=this
+            if(pluginJob!=null&&lastActionKey==key)text=ManagerPluginMailbox.status(pluginJob!!)?.first ?: "Wird verarbeitet …"
         }
-        eyebrow(parent,"DEINE QUELLEN")
-        if(items.isEmpty()) add(parent,label("Noch keine Quellen geladen. Aktualisiere die Liste.",13f,mutedColor),top=6)
-        for (item in items) {
-            val url=item.optString("url")
-            val enabled=item.optBoolean("enabled")
-            val error=item.optString("error")
-            val checked=item.optLong("checkedAt")
-            card(parent,top=9) {
-                val header=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
-                val iconBox=LinearLayout(this@ValancedXActivity).apply {
-                    gravity=Gravity.CENTER
-                    background=rounded(VxThemes.blend(raisedColor,accentColor,.10f),borderColor,14)
+    }
+    private fun updateBusyStrip(){
+        val job=pluginJob
+        val status=job?.let{ManagerPluginMailbox.status(it)}
+        busyLabel?.text=if(job!=null)status?.first ?: "Warte auf Discord …" else pluginNote.ifBlank{"Bereit"}
+        busyLabel?.setTextColor(if(job!=null)accentColor else mutedColor)
+        busyProgress?.visibility=if(job!=null)View.VISIBLE else View.INVISIBLE
+        busyProgress?.let{bar->
+            val percent=status?.second?:-1
+            if(bar.isIndeterminate!=(percent<0))bar.isIndeterminate=percent<0
+            if(percent>=0)bar.progress=percent
+        }
+        busyCancel?.visibility=if(job!=null&&status?.first=="Warte auf Discord")View.VISIBLE else View.INVISIBLE
+        val current=lastActionKey?.let{actionControls[it]}
+        if(job!=null&&current!=null){
+            val value=if((status?.second?:-1)>=0)"Installiere … "+status!!.second+"%" else status?.first?:"Wird verarbeitet …"
+            if(current.text.toString()!=value)current.text=value
+            current.isEnabled=false
+        }
+    }
+    private fun busyStrip(parent:LinearLayout){
+        val strip=column()
+        val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
+        busyLabel=label("",11f,mutedColor).apply{maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END}
+        row.addView(busyLabel,LinearLayout.LayoutParams(0,dp(22),1f))
+        busyCancel=label("Abbrechen",11f,accentColor,true).apply{
+            gravity=Gravity.CENTER;setPadding(dp(8),0,dp(8),0)
+            setOnClickListener{if(pluginJob?.let{ManagerPluginMailbox.cancel(it)}!=true)Toast.makeText(this@ValancedXActivity,"Aktion läuft bereits.",Toast.LENGTH_SHORT).show()}
+        }
+        row.addView(busyCancel,LinearLayout.LayoutParams(-2,dp(22)))
+        add(strip,row)
+        busyProgress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{
+            max=100;progressTintList=ColorStateList.valueOf(accentColor);indeterminateTintList=ColorStateList.valueOf(accentColor)
+        }
+        strip.addView(busyProgress,LinearLayout.LayoutParams(-1,dp(3)))
+        add(parent,strip,top=9)
+        updateBusyStrip()
+    }
+
+    private fun restartDiscord(){
+        if(restartRunning)return
+        if(!ManagerPluginMailbox.resetUnclaimedForRestart()){
+            Toast.makeText(this,"Eine Aktion läuft. Erst abschließen, dann neu starten.",Toast.LENGTH_LONG).show();return
+        }
+        if(discordVersion()==null){Toast.makeText(this,"Discord nicht gefunden.",Toast.LENGTH_SHORT).show();return}
+        restartRunning=true
+        connectionGranted=grantConnection()
+        Toast.makeText(this,"Discord wird neu gestartet …",Toast.LENGTH_SHORT).show()
+        Thread {
+            val success=runCatching{
+                val user=android.os.Process.myUid()/100000
+                val proc=ProcessBuilder("su","-c","/system/bin/am force-stop --user "+user+" com.discord").redirectErrorStream(true).start()
+                // Do not leave a pending root prompt or process alive forever.
+                if(!proc.waitFor(15,java.util.concurrent.TimeUnit.SECONDS)){proc.destroyForcibly();false}
+                else proc.exitValue()==0
+            }.getOrDefault(false)
+            runOnUiThread{
+                restartRunning=false
+                if(isFinishing||isDestroyed)return@runOnUiThread
+                if(success){
+                    discordThemeState=null
+                    openDiscord()
+                    Toast.makeText(this,"Discord vollständig neu gestartet.",Toast.LENGTH_SHORT).show()
+                }else{
+                    Toast.makeText(this,"Root-Neustart nicht möglich. Bitte Root-Zugriff erlauben.",Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun segmented(parent:LinearLayout,names:List<String>,selected:Int,choose:(Int)->Unit,top:Int=12){
+        val nav=LinearLayout(this).apply{background=rounded(surfaceColor,borderColor,18);setPadding(dp(4),dp(4),dp(4),dp(4))}
+        for((i,name) in names.withIndex()){
+            val cell=label(name,12f,if(i==selected)accentColor else mutedColor,i==selected).apply{
+                gravity=Gravity.CENTER;maxLines=1
+                setPadding(dp(2),dp(11),dp(2),dp(11))
+                background=interactive(if(i==selected)VxThemes.blend(raisedColor,accentColor,.13f) else surfaceColor,
+                    if(i==selected)VxThemes.blend(borderColor,accentColor,.25f) else surfaceColor,14)
+                isSelected=i==selected;setOnClickListener{choose(i)}
+            }
+            nav.addView(cell,LinearLayout.LayoutParams(0,-2,1f).apply{setMargins(dp(2),0,dp(2),0)})
+        }
+        add(parent,nav,top=top)
+    }
+    private fun disconnectNotice(parent:LinearLayout){
+        if(pluginData!=null)return
+        card(parent,top=8){
+            add(this,label("Katalog noch nicht geladen",15f,whiteColor,true))
+            add(this,label("Discord einmal starten und aktualisieren. Bereits geladene Einträge bleiben künftig erhalten.",12f,mutedColor),top=5)
+        }
+    }
+    private fun sourceMenu(item:JSONObject){
+        val url=item.optString("url");val enabled=item.optBoolean("enabled")
+        val options=arrayOf("Aktualisieren",if(enabled)"Deaktivieren" else "Aktivieren","URL kopieren","Details","Entfernen")
+        AlertDialog.Builder(this).setTitle(item.optString("name",url)).setItems(options){_,which->
+            val data=JSONObject().put("url",url)
+            when(which){
+                0->pluginAction("refresh_repo",data)
+                1->pluginAction("toggle_repo",data)
+                2->(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Repository",url))
+                3->AlertDialog.Builder(this).setTitle("Repository").setMessage(url+"\n\n"+item.optInt("count")+" Einträge\n"+item.optString("description")).setPositiveButton("OK",null).show()
+                4->AlertDialog.Builder(this).setTitle("Quelle entfernen?").setMessage("Installierte Plugins bleiben erhalten. Ihre Update-Quelle wird entfernt.")
+                    .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen"){_,_->pluginAction("remove_repo",data)}.show()
+            }
+        }.show()
+    }
+    private fun sourceScreen(parent:LinearLayout){
+        val arr=pluginData?.optJSONArray("repos")?:JSONArray()
+        val items=(0 until arr.length()).mapNotNull{arr.optJSONObject(it)}
+        val urls=items.map{it.optString("url")}.toSet()
+        val active=items.filter{it.optBoolean("enabled")}
+        card(parent,top=10){
+            add(this,label("Repository Hub",23f,whiteColor,true))
+            add(this,label("${active.size} aktive Quellen · ${active.sumOf{it.optInt("count")}} Plugin-Einträge",13f,mutedColor),top=5)
+            twoActions(this,button("+ Quelle",true){customPluginSource()},operationButton("Synchronisieren","refresh"))
+        }
+        eyebrow(parent,"INSTALLIERTE QUELLEN")
+        if(items.isEmpty())disconnectNotice(parent)
+        if(items.isNotEmpty())card(parent,top=7){
+            for((i,item) in items.withIndex()){
+                if(i>0)line(this)
+                val url=item.optString("url")
+                val row=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL;tag="vx-repo-"+url}
+                val icon=LinearLayout(this@ValancedXActivity).apply{
+                    gravity=Gravity.CENTER;background=rounded(raisedColor,borderColor,12)
                     addView(VxIcon(this@ValancedXActivity,"source",accentColor),LinearLayout.LayoutParams(dp(22),dp(22)))
                 }
-                header.addView(iconBox,LinearLayout.LayoutParams(dp(44),dp(44)).apply { rightMargin=dp(12) })
+                row.addView(icon,LinearLayout.LayoutParams(dp(42),dp(42)).apply{rightMargin=dp(10)})
                 val title=column()
-                add(title,label(item.optString("name",url),16f,whiteColor,true))
-                add(title,label(Uri.parse(url).host ?: url,11f,mutedColor),top=3)
-                header.addView(title,LinearLayout.LayoutParams(0,-2,1f))
-                header.addView(capsule(if(!enabled) "Aus" else if(error.isNotBlank()) "Fehler" else if(item.optBoolean("cached")) "Aktiv" else "Offen",
-                    if(!enabled) mutedColor else if(error.isNotBlank()) errorColor else if(item.optBoolean("cached")) mintColor else warmColor))
-                add(this,header)
-                if(item.optString("description").isNotBlank()) add(this,label(item.optString("description"),12f,mutedColor),top=10)
-                val info=LinearLayout(this@ValancedXActivity).apply { gravity=Gravity.CENTER_VERTICAL }
-                info.addView(capsule(item.optInt("count").toString()+" Plugins",accentColor))
-                val kind=if(url=="https://community.valenced.app/index.json") "Offizieller Katalog" else "Externe Quelle"
-                info.addView(capsule(kind,mutedColor),LinearLayout.LayoutParams(-2,-2).apply { leftMargin=dp(6) })
-                add(this,info,top=12)
-                add(this,label(if(checked>0L) "Letzte Prüfung: "+time(checked) else "Letzte Prüfung: nicht erfasst",11f,mutedColor),top=10)
-                if(error.isNotBlank()) add(this,label(error,12f,errorColor),top=5)
-                twoActions(this,button("Aktualisieren") { pluginAction("refresh_repo",JSONObject().put("url",url)) },
-                    button(if(enabled) "Deaktivieren" else "Aktivieren",primary=!enabled) { pluginAction("toggle_repo",JSONObject().put("url",url)) })
-                twoActions(this,button("Details") {
-                    AlertDialog.Builder(this@ValancedXActivity).setTitle(item.optString("name",url))
-                        .setMessage(url+"\n\n"+item.optInt("count")+" Plugin-Einträge\n"+kind+
-                            "\n\nFremder Plugin-Code läuft in Discord. Ein gültiger Index ist kein Sicherheitsnachweis.")
-                        .setNeutralButton("URL kopieren") { _,_ -> (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Repository",url)) }
-                        .setPositiveButton("Schließen",null).show()
-                },button("Entfernen",destructive=true) {
-                    AlertDialog.Builder(this@ValancedXActivity).setTitle("Quelle entfernen?")
-                        .setMessage("Installierte Plugins bleiben erhalten, verlieren aber ihre Update-Quelle.")
-                        .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen") { _,_ -> pluginAction("remove_repo",JSONObject().put("url",url)) }.show()
-                },top=7)
+                add(title,label(item.optString("name",url),15f,whiteColor,true).apply{maxLines=2})
+                add(title,label(Uri.parse(url).host?:url,11f,mutedColor).apply{maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END},top=3)
+                val enabled=item.optBoolean("enabled")
+                val error=item.optString("error")
+                val status=if(!enabled)"Deaktiviert" else if(error.isNotBlank())"Indexfehler" else if(item.optBoolean("cached"))"Aktiv" else "Nicht geprüft"
+                add(title,label(item.optInt("count").toString()+" Plugins · "+status,11f,if(error.isNotBlank())errorColor else if(enabled)mintColor else mutedColor),top=4)
+                row.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+                row.addView(Switch(this@ValancedXActivity).apply{
+                    isChecked=enabled;contentDescription="Quelle aktivieren"
+                    thumbTintList=ColorStateList.valueOf(if(enabled)accentColor else mutedColor)
+                    isEnabled=pluginJob==null
+                    setOnCheckedChangeListener{_,_->pluginAction("toggle_repo",JSONObject().put("url",url))}
+                })
+                row.addView(label("⋮",25f,mutedColor,true).apply{
+                    gravity=Gravity.CENTER;contentDescription="Quellenoptionen";setOnClickListener{sourceMenu(item)}
+                },LinearLayout.LayoutParams(dp(32),dp(44)))
+                add(this,row)
+                if(error.isNotBlank())add(this,label(error.take(180),11f,errorColor),top=5)
             }
         }
-        eyebrow(parent,"EMPFOHLENE KATALOGE")
+        eyebrow(parent,"WEITERE KATALOGE")
         val suggested=listOf(
-            Triple("Valenced Community","https://community.valenced.app/index.json","Offizieller Plugin-Katalog"),
-            Triple("dxckie-cell","https://dxckie-cell.github.io/valenced-plugins/index.json","Optionale Community-Erweiterungen"),
-            Triple("ndb1995","https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json","Zusätzlicher Valenced-Katalog")
-        )
-        for ((name,url,description) in suggested) {
-            card(parent,top=8) {
-                add(this,label(name,17f,whiteColor,true))
-                add(this,label(description,12f,mutedColor),top=4)
-                add(this,label(Uri.parse(url).host ?: url,11f,mutedColor),top=5)
-                if(url in urls) add(this,capsule("Bereits hinzugefügt",mintColor),top=9)
-                else add(this,button("Quelle prüfen",true) { pluginAction("preview_repo",JSONObject().put("url",url)) },top=10)
+            Triple("Valenced Community","https://community.valenced.app/index.json","Offizieller Katalog"),
+            Triple("dxckie-cell","https://dxckie-cell.github.io/valenced-plugins/index.json","Community"),
+            Triple("ndb1995","https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json","Community"))
+        card(parent,top=7){
+            for((i,source) in suggested.withIndex()){
+                if(i>0)line(this)
+                val(name,url,description)=source
+                val row=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL;tag="vx-suggest-"+url}
+                val title=column();add(title,label(name,15f,whiteColor,true));add(title,label(description,11f,mutedColor),top=3)
+                row.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+                if(url in urls)row.addView(label("Hinzugefügt",11f,mintColor,true))
+                else row.addView(operationButton("+ Hinzufügen","preview_repo",JSONObject().put("url",url),true),LinearLayout.LayoutParams(-2,-2))
+                add(this,row)
             }
         }
         eyebrow(parent,"LEGACY")
-        card(parent,top=8) {
-            add(this,label("Revenge Next",16f,whiteColor,true))
-            add(this,label("Archivierte Plattform. Legacy-Plugins benötigen einen kompatiblen Port; kein automatischer Import.",12f,mutedColor),top=6)
-            add(this,button("Legacy-Import öffnen",true) { pluginPage=3;render() },top=10)
-            add(this,button("Archiv ansehen") { openWeb("https://github.com/revenge-mod/revenge-community-plugins") },top=7)
+        card(parent,top=7){
+            add(this,label("Revenge / Vendetta",16f,whiteColor,true))
+            add(this,label("Experimenteller JS-Port, getrennt von nativen Quellen.",12f,mutedColor),top=5)
+            add(this,button("Legacy-Import"){pluginPage=3;render()},top=8)
         }
     }
 
+    private fun catalogPreview(url:String):JSONArray? = DiscordCatalogPreviews.forUrl(url)
 
+    private fun themePreview(parent:LinearLayout,values:JSONArray?,animated:Boolean=false){
+        parent.addView(DiscordThemePreview(this,DiscordThemePreview.palette(values,currentTheme),animated),
+            LinearLayout.LayoutParams(-1,dp(162)).apply{topMargin=dp(11)})
+    }
+    private fun builtinPalette(id:String):JSONArray{
+        val p=when(id){
+            "midnight"->listOf("#0d0e12","#17191f","#21232c","#beaeff","#f5f5fc")
+            "lavender"->listOf("#15101d","#211b2d","#30263e","#c8b7ff","#f7f3ff")
+            "frost"->listOf("#0b111b","#142030","#1d2b3e","#9acbff","#eff6ff")
+            "neon"->listOf("#080b13","#141b29","#1c2737","#48e5e2","#f2f8ff")
+            "glass"->listOf("#100f1a","#201e2d","#2b293b","#c8b7ff","#f7f3ff")
+            "amoled"->listOf("#000000","#101114","#1a1b20","#d0bfff","#f7f7fa")
+            "bloom"->listOf("#0c0710","#25172d","#3a2444","#f4acd5","#faf0fb")
+            "eclipse"->listOf("#05070e","#151b2d","#252d43","#a9b9ff","#eef2ff")
+            else->listOf("#080b17","#141b29","#251f3b","#71e6c9","#f5f5fc")
+        };return JSONArray(p)
+    }
+    private fun backgroundScreen(parent:LinearLayout,ready:Boolean){
+        eyebrow(parent,"HINTERGRUND STUDIO")
+        val background=discordThemeState?.optJSONObject("background")?:JSONObject()
+        val path=background.optString("path")
+        var opacity=background.optDouble("opacity",1.0)
+        var blur=background.optInt("blur",0)
+        var dim=background.optDouble("dimming",.7)
+        fun payload(source:String)=JSONObject().put("source",source).put("opacity",opacity).put("blur",blur).put("dimming",dim)
+        fun apply(data:JSONObject){
+            if(ready)pluginAction("theme_background",data)
+            else Toast.makeText(this,"Theme Engine zuerst verbinden.",Toast.LENGTH_SHORT).show()
+        }
+        card(parent,top=8){
+            add(this,label("Hintergrund-Einstellungen",17f,whiteColor,true))
+            add(this,label(if(path.isNotBlank())"Aktiv: "+(path.substringAfterLast('/').take(70)) else "Quelle: "+background.optString("source","theme"),12f,mutedColor),top=4)
+            fun slider(title:String,value:Int,max:Int,set:(Int)->Unit){
+                val text=label(title+" · "+value,12f,whiteColor,true)
+                add(this,text,top=10)
+                add(this,android.widget.SeekBar(this@ValancedXActivity).apply{
+                    this.max=max;progress=value.coerceIn(0,max);progressTintList=ColorStateList.valueOf(accentColor);thumbTintList=ColorStateList.valueOf(accentColor)
+                    setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
+                        override fun onProgressChanged(b:android.widget.SeekBar?,v:Int,fromUser:Boolean){text.text=title+" · "+v;set(v)}
+                        override fun onStartTrackingTouch(b:android.widget.SeekBar?){}
+                        override fun onStopTrackingTouch(b:android.widget.SeekBar?){}
+                    })
+                })
+            }
+            slider("Deckkraft %",(opacity*100).toInt(),100){opacity=it/100.0}
+            slider("Unschärfe",blur,40){blur=it}
+            slider("Abdunklung %",(dim*100).toInt(),100){dim=it/100.0}
+            add(this,button("Aktuelle Werte anwenden",true){
+                val motion=Regex("veyra-motion-(aurora|bloom|eclipse)\\.png$").find(path)?.groupValues?.get(1)
+                val source=background.optString("source","theme")
+                val data=payload(source)
+                if(source=="custom"){if(motion!=null)data.put("motion",motion) else data.put("path",path)}
+                apply(data)
+            },top=9)
+            twoActions(this,button("Theme-Hintergrund"){apply(payload("theme"))},button("Kein Hintergrund"){apply(payload("none"))})
+            add(this,button("+ Bild-URL"){urlPrompt("Hintergrundbild","https://…/image.png"){url->apply(payload("custom").put("path",url))}},top=8)
+        }
+        eyebrow(parent,"ANIMIERTE DESIGNS")
+        for((id,name,palette) in listOf(Triple("aurora","Veyra Aurora","neon"),Triple("bloom","Veyra Bloom Motion","bloom"),Triple("eclipse","Veyra Eclipse Motion","eclipse"))){
+            card(parent,top=9){
+                tag="vx-motion-"+id
+                add(this,label(name,17f,whiteColor,true))
+                add(this,label("Animierter Farbverlauf · native RN-Animation",11f,accentColor),top=4)
+                themePreview(this,builtinPalette(palette),true)
+                add(this,button(if(path.endsWith("veyra-motion-"+id+".png"))"Erneut anwenden" else "Anwenden",true){apply(payload("custom").put("motion",id))},top=9)
+            }
+        }
+        add(parent,label("Die Animation läuft nur bei aktivem Discord. MP4/WebM werden noch nicht unterstützt.",11f,mutedColor),top=12)
+    }
 
     private var themePage=0
     private var discordThemeState:JSONObject?=null
@@ -996,22 +1185,12 @@ class ValancedXActivity : Activity() {
         eyebrow(parent,"APPEARANCE")
         add(parent,label("Themes",29f,whiteColor,true),top=4)
         add(parent,label("Gestalte Discord und ValancedX getrennt.",13f,mutedColor),top=5)
-        val nav=LinearLayout(this).apply { background=rounded(surfaceColor,borderColor,16);setPadding(dp(4),dp(4),dp(4),dp(4)) }
-        for((i,name) in listOf("Discord","Manager").withIndex()) {
-            val selected=i==themePage
-            nav.addView(label(name,14f,if(selected)whiteColor else mutedColor,true).apply{
-                gravity=Gravity.CENTER;setPadding(dp(5),dp(12),dp(5),dp(12))
-                background=interactive(if(selected)raisedColor else surfaceColor,if(selected)accentColor else surfaceColor,12)
-                setOnClickListener { themePage=i;render();if(i==0&&discordThemeState==null&&pluginJob==null)pluginAction("theme_snapshot") }
-            },LinearLayout.LayoutParams(0,-2,1f))
-        }
-        add(parent,nav,top=15)
+        segmented(parent,listOf("Discord","Manager"),themePage,{i->
+            themePage=i;render()
+            if(i==0&&discordThemeState==null&&pluginJob==null)pluginAction("theme_snapshot")
+        },15)
         if(themePage==1){themeScreen(parent);return}
-        if(pluginJob!=null){
-            add(parent,ProgressBar(this).apply{isIndeterminate=true},top=8)
-            add(parent,label(pluginJob?.let{ManagerPluginMailbox.status(it)?.first}?:"Discord verarbeitet die Aktion …",12f,accentColor),top=4)
-        }
-        if(pluginNote.isNotBlank())add(parent,label(pluginNote,12f,mutedColor),top=7)
+        busyStrip(parent)
         val state=discordThemeState
         val ready=state?.optBoolean("ready")==true
         card(parent,top=12){
@@ -1019,7 +1198,8 @@ class ValancedXActivity : Activity() {
             add(this,label(if(ready)"Verbunden" else "Einrichtung",22f,whiteColor,true),top=8)
             add(this,label(if(ready)"Farben, Hintergründe, Fonts und Packs werden im echten Valenced-Theme-System verwaltet."
                 else "Installiere bzw. aktualisiere die offiziellen Themes-Plugins und starte Discord anschließend neu.",12f,mutedColor),top=5)
-            twoActions(this,button("Status prüfen"){pluginAction("theme_snapshot")},button("Discord öffnen"){openDiscord()})
+            twoActions(this,operationButton("Synchronisieren","theme_snapshot"),button("Discord neu starten"){restartDiscord()})
+            if(!ready)add(this,button("Discord öffnen"){openDiscord()},top=7)
             if(!ready)add(this,button("Theme Engine installieren / aktualisieren",true){
                 pluginAction("install_direct",JSONObject().put("id","valenced.settings.themes").put("repo","https://community.valenced.app/index.json"))
             },top=8)
@@ -1027,59 +1207,99 @@ class ValancedXActivity : Activity() {
                 pluginAction("enable",JSONObject().put("id","valenced.settings.themes"))
             },top=8)
         }
-        if(ready){
-            eyebrow(parent,"DEINE THEMES & PACKS")
-            val kinds=listOf("themes" to "Farben","fontPacks" to "Fonts","iconPacks" to "Icons","emojiPacks" to "Emoji")
-            val row=LinearLayout(this)
-            for((key,name) in kinds)row.addView(label(name,11f,if(key==themeKind)whiteColor else mutedColor,true).apply{
-                gravity=Gravity.CENTER;setPadding(dp(3),dp(12),dp(3),dp(12))
-                background=interactive(if(key==themeKind)raisedColor else surfaceColor,if(key==themeKind)accentColor else borderColor,12)
-                setOnClickListener {themeKind=key;render(preserveScroll=true)}
-            },LinearLayout.LayoutParams(0,-2,1f).apply{setMargins(dp(2),0,dp(2),0)})
-            add(parent,row,top=8)
-            val entries=state?.optJSONArray("entries")?:JSONArray()
-            val selected=(0 until entries.length()).mapNotNull{entries.optJSONObject(it)}.filter{it.optString("kind")==themeKind}
-            if(selected.isEmpty())add(parent,label("Noch keine registrierten Packs. Installiere ein Theme-Plugin oder importiere ein JSON-Theme.",12f,mutedColor),top=10)
-            for(item in selected)card(parent,top=8){
-                add(this,label(item.optString("name"),16f,whiteColor,true))
-                add(this,label(item.optString("description"),12f,mutedColor),top=5)
-                if(item.optBoolean("active"))add(this,capsule("Aktiv",mintColor),top=8)
-                else add(this,button("Anwenden",true){
-                    pluginAction("theme_apply",JSONObject().put("plugin",item.optString("plugin")).put("group",item.optString("group"))
-                        .put("id",item.optString("id")).put("kind",item.optString("kind")))
-                },top=8)
-                if(item.optBoolean("imported"))add(this,button("Import entfernen",destructive=true){
-                    AlertDialog.Builder(this@ValancedXActivity).setTitle("Theme entfernen?")
-                        .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen"){_,_->pluginAction("theme_remove",JSONObject().put("url",item.optString("id")))}.show()
-                },top=6)
-            }
-            add(parent,button("Discord-Standard wiederherstellen"){pluginAction("theme_reset",JSONObject().put("kind",themeKind))},top=10)
+        val kinds=listOf("themes" to "Farben","fontPacks" to "Fonts","iconPacks" to "Icons","emojiPacks" to "Emoji","backgrounds" to "Hintergrund")
+        val kindIndex=kinds.indexOfFirst{it.first==themeKind}.coerceAtLeast(0)
+        segmented(parent,kinds.take(4).map{it.second},kindIndex.coerceAtMost(3),{i->themeKind=kinds[i].first;render(preserveScroll=true)})
+        add(parent,button(if(themeKind=="backgrounds")"Hintergrund-Studio · Aktiv" else "Hintergrund-Studio",themeKind=="backgrounds"){
+            themeKind="backgrounds";render(preserveScroll=true)
+        },top=7)
+        if(themeKind=="backgrounds"){backgroundScreen(parent,ready);return}
+        val entries=state?.optJSONArray("entries")?:JSONArray()
+        val selected=(0 until entries.length()).mapNotNull{entries.optJSONObject(it)}.filter{it.optString("kind")==themeKind}
+        eyebrow(parent,"DISCORD STANDARD")
+        card(parent,top=7){
+            add(this,label("Discord Original",17f,whiteColor,true))
+            add(this,label("Standard-Einstellungen für "+kinds[kindIndex].second,12f,mutedColor),top=4)
+            if(ready&&state?.optJSONObject("defaults")?.optBoolean(themeKind)==true)add(this,capsule("Aktiv",mintColor),top=8)
+            else add(this,operationButton("Wiederherstellen","theme_reset",JSONObject().put("kind",themeKind)),top=8)
         }
+        if(themeKind=="themes"&&!ready){
+            eyebrow(parent,"VEYRA STUDIO")
+            for(id in listOf("midnight","lavender","frost","neon","glass","amoled","bloom","eclipse"))card(parent,top=8){
+                tag="vx-theme-own-"+id
+                add(this,label("Veyra "+id.replaceFirstChar{it.uppercase()},16f,whiteColor,true))
+                themePreview(this,builtinPalette(id))
+                add(this,label("Theme Engine verbinden, um dieses Design anzuwenden.",11f,mutedColor),top=8)
+            }
+        }
+        if(selected.isNotEmpty())eyebrow(parent,when(themeKind){"themes"->"DEINE DESIGNS";"fontPacks"->"SCHRIFTPAKETE";"iconPacks"->"ICON-PAKETE";else->"EMOJI-PAKETE"})
+        for(item in selected)card(parent,top=8){
+            val id=item.optString("id");val provider=item.optString("plugin");val group=item.optString("group")
+            tag="vx-theme-"+provider+"|"+group+"|"+id
+            add(this,label(item.optString("name"),17f,whiteColor,true))
+            if(item.optString("description").isNotBlank())add(this,label(item.optString("description"),12f,mutedColor),top=5)
+            when(themeKind){
+                "themes"->{
+                    val palette=item.optJSONArray("preview")
+                    if(palette!=null&&palette.length()>0)themePreview(this,palette)
+                    else add(this,label("Farben noch nicht aufgelöst.",11f,mutedColor),top=6)
+                    if(item.optString("background").isNotBlank())add(this,label("Enthält Hintergrund",11f,accentColor),top=5)
+                }
+                "fontPacks"->{
+                    add(this,label("Aa  Veyra Studio",24f,whiteColor,true),top=7)
+                    add(this,label(item.optString("detail"),11f,mutedColor),top=4)
+                    add(this,label("Schrift-Familien · Vorschau im Manager verwendet Systemschrift",10f,mutedColor),top=3)
+                }
+                "iconPacks"->add(this,label(item.optString("detail"),12f,accentColor),top=7)
+                "emojiPacks"->add(this,label(if(item.optBoolean("own"))"😀 💜 🔥 🥰" else "Emoji-Paket · Vorschau in Discord",if(item.optBoolean("own"))23f else 12f,whiteColor),top=7)
+            }
+            if(item.optBoolean("active"))add(this,capsule("Aktiv",mintColor),top=8)
+            else add(this,operationButton("Anwenden","theme_apply",JSONObject().put("plugin",provider).put("group",group)
+                .put("id",id).put("kind",item.optString("kind")),true),top=8)
+            if(item.optBoolean("imported"))add(this,button("Import entfernen",destructive=true){
+                AlertDialog.Builder(this@ValancedXActivity).setTitle("Import entfernen?")
+                    .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen"){_,_->pluginAction("theme_remove",JSONObject().put("url",id).put("kind",themeKind))}.show()
+            },top=6)
+        }
+        if(ready&&selected.isEmpty()&&themeKind!="themes")add(parent,label("Noch keine zusätzlichen Pakete dieser Kategorie registriert.",12f,mutedColor),top=10)
         val available=pluginData?.optJSONArray("available")?:JSONArray()
         val packs=(0 until available.length()).mapNotNull{available.optJSONObject(it)}.filter{it.optBoolean("themePack")}
         if(packs.isNotEmpty()){
-            eyebrow(parent,"THEME-PLUGINS AUS DEINEN REPOSITORIES")
+            eyebrow(parent,"THEME-PLUGINS")
             for(item in packs)card(parent,top=8){
-                add(this,label(item.optString("name"),16f,whiteColor,true))
-                add(this,label(item.optString("description"),12f,mutedColor),top=5)
-                val id=item.optString("id")
-                if(item.optBoolean("installed"))add(this,button("Aktivieren"){pluginAction("enable",JSONObject().put("id",id))},top=8)
-                else add(this,button("Installieren",true){pluginAction("install_direct",JSONObject().put("id",id).put("repo",item.optString("repo")))},top=8)
+                val id=item.optString("id");val repo=item.optString("repo")
+                tag="vx-pack-"+id+"|"+repo
+                add(this,label(item.optString("name"),15f,whiteColor,true))
+                add(this,label(item.optString("description"),12f,mutedColor),top=4)
+                if(item.optBoolean("installed")&&item.optString("installedVersion")==item.optString("version")){
+                    add(this,operationButton("Aktivieren","enable",JSONObject().put("id",id)),top=7)
+                }else add(this,operationButton(if(item.optBoolean("installed"))"Aktualisieren" else "Installieren","install_direct",JSONObject().put("id",id).put("repo",repo),true),top=7)
             }
         }
-        eyebrow(parent,"THEME-QUELLEN")
-        card(parent,top=8){
-            add(this,label("Legacy JSON importieren",16f,whiteColor,true))
-            add(this,label("Vendetta, Bunny und Revenge Spec 2. Importierte Farben lassen sich anschließend direkt anwenden.",12f,mutedColor),top=5)
-            add(this,button("+ Theme-URL",true){urlPrompt("Discord Theme","https://…/theme.json"){url->pluginAction("theme_import",JSONObject().put("url",url))}},top=10)
+        if(themeKind=="fontPacks"){
+            eyebrow(parent,"FONT-IMPORT")
+            card(parent,top=8){
+                add(this,label("Bunny / Revenge Schriftpaket",16f,whiteColor,true))
+                add(this,label("Spec-1 JSON mit TTF-/OTF-Dateien.",12f,mutedColor),top=5)
+                add(this,button("+ Font-Pack URL",true){urlPrompt("Font-Pack","https://…/font.json"){url->pluginAction("theme_font_import",JSONObject().put("url",url))}},top=8)
+            }
         }
-        for((name,desc,url) in themeCatalog)card(parent,top=8){
-            add(this,label(name,16f,whiteColor,true));add(this,label(desc,12f,mutedColor),top=4)
-            add(this,label(Uri.parse(url).host?:"GitHub",11f,mutedColor),top=5)
-            add(this,button("Importieren",true){
-                if(ready)pluginAction("theme_import",JSONObject().put("url",url))
-                else Toast.makeText(this@ValancedXActivity,"Zuerst Theme Engine einrichten.",Toast.LENGTH_LONG).show()
-            },top=8)
+        if(themeKind=="themes"){
+            eyebrow(parent,"THEME-KATALOG")
+            card(parent,top=8){
+                add(this,label("Eigenes JSON-Theme",16f,whiteColor,true))
+                add(this,label("Vendetta, Bunny, Revenge Spec 2.",12f,mutedColor),top=5)
+                add(this,button("+ Theme-URL",true){urlPrompt("Discord Theme","https://…/theme.json"){url->pluginAction("theme_import",JSONObject().put("url",url))}},top=8)
+            }
+            for((name,desc,url) in themeCatalog)card(parent,top=8){
+                tag="vx-catalog-"+url
+                add(this,label(name,17f,whiteColor,true))
+                add(this,label(desc,12f,mutedColor),top=4)
+                catalogPreview(url)?.let{themePreview(this,it)}
+                val imported=selected.any{it.optString("id")==url}
+                if(imported)add(this,capsule("Importiert",mintColor),top=8)
+                else add(this,operationButton("Importieren","theme_import",JSONObject().put("url",url),true),top=8)
+            }
         }
     }
     private fun urlPrompt(title:String,hint:String,run:(String)->Unit){
@@ -1116,48 +1336,18 @@ class ValancedXActivity : Activity() {
         eyebrow(parent, "PLUGIN MANAGER")
         add(parent, label("Plugins", 27f, whiteColor, true), top = 4)
         add(parent, label("Installieren, verwalten und Quellen hinzufügen.", 13f, mutedColor), top = 5)
-        val nav = LinearLayout(this).apply { background = rounded(surfaceColor, borderColor, 15); setPadding(dp(3),dp(3),dp(3),dp(3)) }
-        for ((i, text) in arrayOf("Installiert", "Entdecken", "Quellen", "Legacy").withIndex()) {
-            nav.addView(label(text, 12f, if (pluginPage == i) whiteColor else mutedColor, true).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(2), dp(12), dp(2), dp(12))
-                background = interactive(if (pluginPage == i) raisedColor else surfaceColor, borderColor, 12)
-                setOnClickListener {
-                    pluginPage=i;pluginQuery="";render()
-                    if(pluginData==null&&pluginJob==null) pluginAction("snapshot")
-                }
-            }, LinearLayout.LayoutParams(0,-2,1f))
-        }
-        add(parent, nav, top = 15)
+        segmented(parent,listOf("Installiert","Entdecken","Quellen","Legacy"),pluginPage,{i->
+            pluginPage=i;pluginQuery="";render()
+            if(pluginData==null&&pluginJob==null)pluginAction("snapshot")
+        },15)
         discoveryControls.clear()
-        // The list stays mounted while an individual plugin is installing.
-        if (pluginNote.isNotBlank() && pluginPage != 1)
-            add(parent, label(pluginNote, 12f, if (pluginJob != null) accentColor else mutedColor), top = 10)
-        if (pluginPage==2) {
-            if (pluginJob!=null) {
-                add(parent,ProgressBar(this).apply { isIndeterminate=true },top=4)
-                add(parent,label("Quellen werden geprüft …",12f,accentColor),top=4)
-            }
-            sourceScreen(parent);return
-        }
-        if (pluginJob != null && pluginTarget == null) {
-            add(parent, ProgressBar(this).apply { isIndeterminate = true }, top = 6)
-            add(parent, button("Discord öffnen") { openDiscord() }, top = 8)
-            add(parent, button("Wartende Aktion abbrechen") {
-                if (pluginJob?.let { ManagerPluginMailbox.cancel(it) } != true)
-                    Toast.makeText(this, "Aktion wird bereits ausgeführt.", Toast.LENGTH_SHORT).show()
-            }, top = 8)
-            return
-        }
+        busyStrip(parent)
+        if(pluginPage==2){sourceScreen(parent);return}
         if(pluginPage==3){legacyScreen(parent);return}
-        val actions = LinearLayout(this)
-        actions.addView(button("Aktualisieren") { pluginAction(if (pluginPage == 0) "snapshot" else "refresh") }, LinearLayout.LayoutParams(0,-2,1f))
-        actions.addView(button("Discord öffnen") { openDiscord() }, LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin = dp(6) })
-        add(parent, actions, top = 10)
-        if (pluginPage == 1) add(parent, label("Ein Tipp installiert das Plugin samt benötigter Abhängigkeiten. Nur vertrauenswürdige Quellen verwenden.", 11f, mutedColor), top = 8)
-        if (pluginData == null) {
-            add(parent, label("Öffne Discord einmal nach dem Update und aktualisiere dann die Liste. Der Manager nutzt die echte Plugin-Bridge.", 13f, mutedColor), top = 10)
-        }
+        twoActions(parent,operationButton("Aktualisieren",if(pluginPage==0)"snapshot" else "refresh"),
+            button("Discord neu starten"){restartDiscord()})
+        if(pluginPage==1)add(parent,label("Ein Tipp installiert das Plugin. Neue Plugins bleiben bis zur Aktivierung aus.",11f,mutedColor),top=8)
+        disconnectNotice(parent)
         val search = EditText(this).apply {
             hint = "Plugins suchen …"
             setText(pluginQuery)
@@ -1182,6 +1372,7 @@ class ValancedXActivity : Activity() {
             for (item in filtered) {
                 val id = item.optString("id")
                 card(list, top = 8) {
+                    tag="vx-plugin-"+id+"|"+item.optString("repo")
                     add(this,label(item.optString("name",id),16f,whiteColor,true))
                     add(this,label("v" + item.optString("version") + " · " + item.optString("author").substringBefore(" <").substringBefore(" (").trim(),11f,accentColor),top=4)
                     if (item.optString("description").isNotBlank()) add(this,label(item.optString("description"),12f,mutedColor),top=6)
@@ -1192,9 +1383,7 @@ class ValancedXActivity : Activity() {
                             if (item.optBoolean("failed")) "Fehler" else if (enabled) "Aktiviert" else "Deaktiviert",
                             if (item.optBoolean("failed")) errorColor else if (enabled) mintColor else mutedColor)
                         if (item.optString("pending").isNotBlank()) add(this,label("Update bereit – Neustart erforderlich",11f,warmColor))
-                        if (!essential) add(this,button(if (enabled) "Deaktivieren" else "Aktivieren") {
-                            pluginAction(if (enabled) "disable" else "enable",JSONObject().put("id",id))
-                        },top=6)
+                        if (!essential) add(this,operationButton(if(enabled)"Deaktivieren" else "Aktivieren",if(enabled)"disable" else "enable",JSONObject().put("id",id)),top=6)
                         if (!essential && !item.optBoolean("internal")) add(this,button("Deinstallieren", destructive=true) {
                             AlertDialog.Builder(this@ValancedXActivity).setTitle("Plugin deinstallieren?")
                                 .setMessage("Auch lokale Daten dieses Plugins werden gelöscht.")
@@ -1236,6 +1425,20 @@ class ValancedXActivity : Activity() {
 
     private fun render(preserveScroll: Boolean = false) {
         val previousY = if (preserveScroll) scrollView?.scrollY ?: restoredScrollY else 0
+        val anchor=if(preserveScroll)scrollView?.let{old->
+            fun find(v:View):Pair<String,Int>? {
+                val tag=v.tag as? String
+                if(tag!=null&&tag.startsWith("vx-")&&!tag.startsWith("vx-action-")){
+                    val rect=android.graphics.Rect(0,0,v.width,v.height)
+                    old.offsetDescendantRectToMyCoords(v,rect)
+                    if(rect.bottom>old.scrollY&&rect.top<old.scrollY+old.height)return tag to (rect.top-old.scrollY)
+                }
+                if(v is android.view.ViewGroup)for(i in 0 until v.childCount){find(v.getChildAt(i))?.let{return it}}
+                return null
+            }
+            runCatching{find(old)}.getOrNull()
+        }else null
+        busyLabel=null;busyProgress=null;busyCancel=null;actionControls.clear()
         restoredScrollY = 0
         discoveryControls.clear()
         readTheme()
@@ -1262,7 +1465,7 @@ class ValancedXActivity : Activity() {
                 setOnClickListener { action() }
             }
         header.addView(headerIcon("theme","Themes") {
-            currentTab=3;themePage=1;render()
+            currentTab=3;themePage=0;render();if(pluginJob==null)pluginAction("theme_snapshot")
         },LinearLayout.LayoutParams(dp(40),dp(42)).apply { rightMargin=dp(6) })
         header.addView(headerIcon("refresh","Aktualisieren") {
             connectionGranted=grantConnection()
@@ -1299,8 +1502,8 @@ class ValancedXActivity : Activity() {
             val cell = column().apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(3), dp(5), dp(3), dp(5))
-                background = interactive(if (selected) raisedColor else surfaceColor,
-                    if (selected) VxThemes.blend(borderColor,accentColor,.28f) else surfaceColor, 16)
+                background = interactive(if (selected) VxThemes.blend(raisedColor,accentColor,.15f) else surfaceColor,
+                    if (selected) VxThemes.blend(borderColor,accentColor,.32f) else surfaceColor, 16)
                 isClickable = true
                 isFocusable = true
                 isSelected = selected
@@ -1331,6 +1534,16 @@ class ValancedXActivity : Activity() {
         }
         setContentView(root)
         root.requestApplyInsets()
-        if (previousY > 0) scroll.post { scroll.scrollTo(0, previousY) }
+        if(previousY>0||anchor!=null)scroll.viewTreeObserver.addOnGlobalLayoutListener(object:android.view.ViewTreeObserver.OnGlobalLayoutListener{
+            override fun onGlobalLayout(){
+                scroll.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                var y=previousY
+                if(anchor!=null){
+                    val v=scroll.findViewWithTag<View>(anchor.first)
+                    if(v!=null){val rect=android.graphics.Rect(0,0,v.width,v.height);scroll.offsetDescendantRectToMyCoords(v,rect);y=rect.top-anchor.second}
+                }
+                scroll.scrollTo(0,y.coerceAtLeast(0))
+            }
+        })
     }
 }

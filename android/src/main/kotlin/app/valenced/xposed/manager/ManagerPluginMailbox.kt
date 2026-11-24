@@ -16,7 +16,7 @@ internal object ManagerPluginMailbox {
     @Synchronized fun cachedSnapshot(): String? = snapshot
     private val allowed = setOf("snapshot", "refresh", "refresh_repo", "preview_repo", "add_repo", "toggle_repo", "remove_repo",
         "plan", "install", "install_direct", "enable", "disable", "uninstall", "legacy_preview", "legacy_install",
-        "theme_snapshot", "theme_import", "theme_apply", "theme_reset", "theme_remove")
+        "theme_snapshot", "theme_import", "theme_apply", "theme_reset", "theme_remove", "theme_font_import", "theme_background")
     @Synchronized fun submit(operation: String, payload: JSONObject): String {
         require(operation in allowed)
         require(payload.toString().length <= 4096)
@@ -63,6 +63,13 @@ internal object ManagerPluginMailbox {
                 snapshot = result
             }
         }
+    }
+    @Synchronized fun resetUnclaimedForRestart(): Boolean {
+        val job=current ?: return true
+        if(job.result!=null)return true
+        if(job.claimed)return false
+        job.result=JSONObject().put("error","Discord wird neu gestartet.").toString()
+        return true
     }
     @Synchronized fun cancel(id: String): Boolean {
         val job = current ?: return false

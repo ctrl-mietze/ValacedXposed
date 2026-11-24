@@ -262,27 +262,20 @@ val pluginInstallMethods by tweak {
                 pluginRegistry.add(factory)
                 // Default state for fresh installs.
                 clearBootSlotFlags(factory.manifest.id)
-                runSuspendCatching {
-                    callJSMethod(
-                        PluginEvents.PLUGIN_INSTALL_RESULT,
-                        listOf(
-                            mapOf(
-                                "error" to false,
-                                "plugin" to factory.toJSPayload(source = SourcesStore[factory.manifest.id]),
-                            ),
-                        ),
-                    )
-                }.onFailure { pluginLog.e("Failed to notify JS of plugin install", it) }
+                val event=mapOf("error" to false,"plugin" to factory.toJSPayload(source=SourcesStore[factory.manifest.id]))
+                if(managerProgress!=null)emitPluginEvent(PluginEvents.PLUGIN_INSTALL_RESULT,event)
+                else runSuspendCatching { callJSMethod(PluginEvents.PLUGIN_INSTALL_RESULT,listOf(event)) }
+                    .onFailure { pluginLog.e("Failed to notify JS of plugin install",it) }
+
             }
 
             for (action in result.pending) {
                 pluginRegistry.pendingUpdates[action.id] = action.version
-                runSuspendCatching {
-                    callJSMethod(
-                        PluginEvents.PLUGIN_UPDATED,
-                        listOf(mapOf("id" to action.id, "version" to action.version.toString())),
-                    )
-                }.onFailure { pluginLog.e("Failed to notify JS of pending update", it) }
+                val event=mapOf("id" to action.id,"version" to action.version.toString())
+                if(managerProgress!=null)emitPluginEvent(PluginEvents.PLUGIN_UPDATED,event)
+                else runSuspendCatching { callJSMethod(PluginEvents.PLUGIN_UPDATED,listOf(event)) }
+                    .onFailure { pluginLog.e("Failed to notify JS of pending update",it) }
+
             }
 
             // Update the dependency graph if needed.

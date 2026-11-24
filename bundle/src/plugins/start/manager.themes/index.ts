@@ -1,133 +1,261 @@
-import { registerJSMethod, callNativeMethodSync } from '@valenced/modules/native'
+import { callNativeMethodSync } from '@valenced/modules/native'
 import { JsonStorage, pluginStoragePathFor } from '@valenced/json-storage'
 import { pList, registerInternalPlugin } from '@valenced/plugins/_'
+import { getModules } from '@valenced/modules/finders'
+import { withProps } from '@valenced/modules/finders/filters'
+import { after } from '@valenced/patcher'
+import { createElement, cloneElement, isValidElement, useEffect, useRef } from 'react'
+import { Animated, AppState, Easing, View } from 'react-native'
 import manifest from './manifest.json'
 
 type ThemeData = { name: string; description: string; colors: any; background?: any }
-type Saved = { imports: Record<string, ThemeData> }
-const ID = 'veyra.manager.themes'
-const GROUP = 'imports'
-const hex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i
-let storage: any
-let imports: Record<string, ThemeData> = {}
-let loaded = false
+type FontData = {name:string; description:string; files:Record<string,string>}
+const ID='veyra.manager.themes'
+const GROUP='imports'
+const OWN='veyra'
+const hex=/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+let storage:any
+let imports:Record<string,ThemeData>={}
+let fonts:Record<string,FontData>={}
+let loadPromise:Promise<void>|undefined
+let registeredStore:any
+let motionCleanup:(()=>void)|undefined
+let polling=false
 
-function themeStore(): any {
+const palettes=[
+    ['midnight','Veyra Midnight','#0d0e12','#17191f','#21232c','#beaeff','#f5f5fc'],
+    ['lavender','Veyra Lavender','#15101d','#211b2d','#30263e','#c8b7ff','#f7f3ff'],
+    ['frost','Veyra Frost','#0b111b','#142030','#1d2b3e','#9acbff','#eff6ff'],
+    ['neon','Veyra Neon','#080b13','#141b29','#1c2737','#48e5e2','#f2f8ff'],
+    ['glass','Veyra Glass','#100f1a','#201e2d','#2b293b','#c8b7ff','#f7f3ff'],
+    ['amoled','Veyra AMOLED','#000000','#101114','#1a1b20','#d0bfff','#f7f7fa'],
+    ['bloom','Veyra Bloom','#0c0710','#25172d','#3a2444','#f4acd5','#faf0fb'],
+    ['eclipse','Veyra Eclipse','#05070e','#151b2d','#252d43','#a9b9ff','#eef2ff'],
+]
+function ownTheme(p:string[]):ThemeData{
+    const [,name,bg,side,card,accent,text]=p
+    const semantic:Record<string,string>={}
+    for(const k of ['BACKGROUND_PRIMARY','BACKGROUND_MOBILE_PRIMARY','BG_BASE_PRIMARY','BACKGROUND_BASE_LOWER','BACKGROUND_BASE_LOW'])semantic[k]=bg!
+    for(const k of ['BACKGROUND_SECONDARY','BACKGROUND_MOBILE_SECONDARY','BACKGROUND_TERTIARY','BACKGROUND_BASE_LOWEST','CHANNEL_BACKGROUND_DEFAULT','BG_BASE_SECONDARY','PANEL_BG'])semantic[k]=side!
+    for(const k of ['BACKGROUND_SURFACE_HIGH','BACKGROUND_SURFACE_HIGHEST','CARD_PRIMARY_BG','MOBILE_FLOATINGBAR_BACKGROUND','BACKGROUND_MODIFIER_SELECTED'])semantic[k]=card!
+    for(const k of ['BACKGROUND_BRAND','BACKGROUND_ACCENT','TEXT_LINK','TEXT_BRAND','ICON_BRAND'])semantic[k]=accent!
+    for(const k of ['TEXT_NORMAL','TEXT_STRONG','TEXT_DEFAULT','HEADER_PRIMARY','INTERACTIVE_ACTIVE'])semantic[k]=text!
+    return {name:name!,description:'Originale Veyra-Farbpalette für Discord',colors:{semantic:{dark:semantic,darker:semantic,midnight:semantic,light:semantic},raw:{
+        BRAND_500:accent,BRAND_560:accent,BRAND_360:accent,PRIMARY_600:bg,PRIMARY_630:side,PRIMARY_660:card,
+    }}}
+}
+function themeStore():any {
     return (pList.get('valenced.settings.themes')?.api as any)?.themesInternal?.store
 }
-
-async function load() {
-    if (loaded) return
-    storage = new (JsonStorage as any)(pluginStoragePathFor(ID,'imports.json'),{default:{imports:{}}})
-    const saved: Saved = await storage.get() ?? {imports:{}}
-    imports = saved.imports ?? {}
-    loaded=true
+function engineError():string {
+    const settings=pList.get('valenced.settings.themes')
+    const api=pList.get('valenced.api.themes')
+    return 'Theme Engine nicht bereit. '+[api,settings].filter(Boolean).map(p=>
+        p!.manifest.name+': '+((p as any).errors?.map((e:any)=>String(e?.message??e)).join('; ')||'Neustart/Abhängigkeiten prüfen')).join(' · ').slice(0,600)
 }
-
-function normalizedColor(value: unknown): string | undefined {
-    if(typeof value !== 'string' || !hex.test(value)) return
-    return value.length===4?'#'+[...value.slice(1)].map(x=>x+x).join(''):value
+async function load(){
+    if(!loadPromise)loadPromise=(async()=>{
+        storage=new (JsonStorage as any)(pluginStoragePathFor(ID,'imports.json'),{default:{imports:{},fonts:{}}})
+        const data=await storage.get()??{}
+        imports=data.imports??{};fonts=data.fonts??{}
+    })().catch(e=>{loadPromise=undefined;throw e})
+    await loadPromise
 }
-function parseLegacyTheme(data:any): ThemeData {
-    if(!data || typeof data!=='object' || data.spec!==2 || typeof data.name!=='string')
-        throw new Error('Nur Legacy-Themes im Spec-2-Format werden unterstützt.')
-    const dark: Record<string,string> = {},light:Record<string,string>={},midnight:Record<string,string>={},raw:Record<string,string>={}
-    const validKey=(k:string)=>/^[A-Za-z0-9_-]{1,100}$/.test(k)&&!['__proto__','constructor','prototype'].includes(k)
-    for(const [key,v] of Object.entries(data.semanticColors??{}).slice(0,1500)){
-        if(!validKey(key)||!Array.isArray(v))continue
+function normalizedColor(v:unknown):string|undefined{
+    if(typeof v!=='string')return
+    if(hex.test(v))return v.length===4?'#'+[...v.slice(1)].map(x=>x+x).join(''):v
+    const match=v.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,[^)]+)?\s*\)$/i)
+    if(match)return '#'+match.slice(1,4).map(x=>Math.min(255,Number(x)).toString(16).padStart(2,'0')).join('')
+}
+function parseLegacyTheme(data:any):ThemeData{
+    if(!data||typeof data!=='object'||data.spec!==2||typeof data.name!=='string')throw new Error('Nur Spec-2-Themes.')
+    const dark:Record<string,string>={},light:Record<string,string>={},midnight:Record<string,string>={},raw:Record<string,string>={}
+    const valid=(k:string)=>/^[A-Za-z0-9_-]{1,100}$/.test(k)&&!['__proto__','constructor','prototype'].includes(k)
+    for(const [k,v] of Object.entries(data.semanticColors??{}).slice(0,1500)){
+        if(!valid(k)||!Array.isArray(v))continue
         const d=normalizedColor(v[0]),l=normalizedColor(v[1]),m=normalizedColor(v[2])??d
-        if(d)dark[key]=d;if(l)light[key]=l;if(m)midnight[key]=m
+        if(d)dark[k]=d;if(l)light[k]=l;if(m)midnight[k]=m
     }
-    for(const [key,v] of Object.entries(data.rawColors??{}).slice(0,1500)){
-        const c=normalizedColor(v);if(validKey(key)&&c)raw[key]=c
+    for(const [k,v] of Object.entries(data.rawColors??{}).slice(0,1500)){
+        const c=normalizedColor(v);if(valid(k)&&c)raw[k]=c
     }
-    if(!Object.keys(dark).length&&!Object.keys(light).length&&!Object.keys(raw).length)throw new Error('Keine gültigen Farben im Theme.')
+    if(!Object.keys(dark).length&&!Object.keys(light).length&&!Object.keys(raw).length)throw new Error('Keine gültigen Farben.')
+    const aliases:Record<string,string[]>={BACKGROUND_PRIMARY:['BACKGROUND_BASE_LOW','BACKGROUND_BASE_LOWER','BG_BASE_PRIMARY'],
+        BACKGROUND_SECONDARY:['BACKGROUND_BASE_LOWEST','CHANNEL_BACKGROUND_DEFAULT','PANEL_BG'],
+        TEXT_NORMAL:['TEXT_DEFAULT','TEXT_STRONG'],BACKGROUND_ACCENT:['BACKGROUND_BRAND']}
+    for(const map of [dark,light,midnight])for(const [old,keys] of Object.entries(aliases))
+        if(map[old])for(const key of keys)map[key]??=map[old]!
     const background=data.background
     return {name:data.name.slice(0,100),description:(String(data.description??'')+' · '+(Array.isArray(data.authors)?data.authors.map((a:any)=>String(a?.name??'')).join(', '):'')).slice(0,180),
         colors:{semantic:{dark,darker:dark,light,midnight},raw},
         ...(typeof background?.url==='string'&&/^https:\/\//i.test(background.url)?{background:{
-            path:background.url.slice(0,1200),
-            opacity:typeof background.alpha==='number'?Math.max(0,Math.min(1,background.alpha)):undefined,
+            path:background.url.slice(0,1200),opacity:typeof background.alpha==='number'?Math.max(0,Math.min(1,background.alpha)):undefined,
             blur:typeof background.blur==='number'?Math.max(0,Math.min(100,background.blur)):undefined,
         }}:{})}
 }
-
-function registerImports(store:any) {
-    store.registerProvider(ID,{name:'ValancedX Imports'})
-    store.registerGroup(ID,GROUP,{name:'ValancedX Imports',description:'Legacy Discord color themes'})
-    for(const [url,theme] of Object.entries(imports))
-        store.registerTheme(ID,GROUP,url,{name:theme.name,description:theme.description,
-            getColors:()=>theme.colors,background:theme.background})
+function fontFamilies(files:Record<string,string>){
+    const families:Record<string,any[]>={}
+    const weights:Record<string,number>={Normal:400,Medium:500,Semibold:600,SemiBold:600,Bold:700,ExtraBold:800,Black:900}
+    for(const [name,path] of Object.entries(files)){
+        const italic=name.endsWith('Italic'),family=italic?name.slice(0,-6):name
+        const weight=weights[family.slice(family.lastIndexOf('-')+1)]??400
+        ;(families[family]??=[]).push({path,weight,italic})
+    }
+    return families
 }
-function snapshot(store:any) {
-    if(!store)return {themeState:{ready:false,entries:[],message:'Discord Themes API installieren oder Discord neu starten.'}}
-    const state=store.themesStore.getState()
+function registerAll(store:any,force=false){
+    if(registeredStore===store&&!force)return
+    registeredStore=store
+    store.registerProvider(ID,{name:'Veyra Studio'})
+    store.registerGroup(ID,OWN,{name:'Veyra Studio',description:'Eigene Discord-Designs'})
+    store.registerGroup(ID,GROUP,{name:'Importiert',description:'Legacy-Themes und Fonts'})
+    for(const p of palettes){
+        const theme=ownTheme(p)
+        store.registerTheme(ID,OWN,p[0],{name:theme.name,description:theme.description,getColors:()=>theme.colors})
+    }
+    for(const [url,theme] of Object.entries(imports))store.registerTheme(ID,GROUP,url,{name:theme.name,description:theme.description,getColors:()=>theme.colors,background:theme.background})
+    for(const [url,font] of Object.entries(fonts))store.registerFontPack(ID,GROUP,url,{name:font.name,description:font.description,families:fontFamilies(font.files)})
+    store.registerFontPack(ID,OWN,'system',{name:'System UI',description:'Android-Systemschrift',families:Object.fromEntries(['ggsans-Normal','ggsans-Medium','ggsans-Semibold','ggsans-Bold','ggsans-ExtraBold'].map(k=>[k,'system-ui']))})
+    store.registerEmojiPack(ID,OWN,'system',{name:'Android System Emoji',description:'Emoji-Schrift des Geräts',font:'system'})
+}
+const tokens=['BACKGROUND_BASE_LOW','CHANNEL_BACKGROUND_DEFAULT','BACKGROUND_SURFACE_HIGHEST','BACKGROUND_BRAND','TEXT_STRONG','TEXT_LINK']
+function previewOf(store:any,plugin:string,group:string,id:string,item:any){
+    try{
+        const colors=store.previewColorsOf(plugin,group,id,'dark',tokens)
+        const parsed=Array.isArray(colors)?colors.map(normalizedColor):[]
+        if(parsed.some(Boolean))return parsed
+    }catch{}
+    const theme=group===OWN?palettes.find(p=>p[0]===id):undefined
+    if(theme)return [theme[2],theme[3],theme[4],theme[5],theme[6],theme[5]]
+    if(plugin===ID&&imports[id]){
+        const c=imports[id]!.colors.semantic.dark
+        return tokens.map(k=>normalizedColor(c[k])??null)
+    }
+    return []
+}
+function snapshot(store:any){
+    if(!store)return {themeState:{ready:false,entries:[],message:engineError()}}
+    const state=store.themesStore.getState(),selected=state.selected??{}
     const entries:any[]=[]
-    for(const [plugin,groups] of Object.entries(state.groups??{}) as [string,any][]){
-        for(const [group,items] of Object.entries(groups) as [string,any][]){
-            for(const kind of ['themes','fontPacks','iconPacks','emojiPacks']){
+    for(const [plugin,groups] of Object.entries(state.groups??{}) as [string,any][])
+        for(const [group,items] of Object.entries(groups??{}) as [string,any][])
+            for(const kind of ['themes','fontPacks','iconPacks','emojiPacks'])
                 for(const [id,item] of Object.entries(items[kind]??{}) as [string,any][]){
                     if(entries.length>=180)break
-                    const selected=kind==='themes'?state.selected.colors:kind==='iconPacks'?state.selected.icons:kind==='emojiPacks'?state.selected.emoji:null
-                    const active=kind==='fontPacks'?Object.values(state.selected.fonts?.families??{}).some((f:any)=>f.plugin===plugin&&f.group===group&&f.pack===id):
-                        selected?.plugin===plugin&&selected?.group===group&&(selected.theme??selected.pack)===id
+                    const s=kind==='themes'?selected.colors:kind==='iconPacks'?selected.icons:kind==='emojiPacks'?selected.emoji:null
+                    const active=kind==='fontPacks'?Object.values(selected.fonts?.families??{}).some((f:any)=>f.plugin===plugin&&f.group===group&&f.pack===id):
+                        s?.plugin===plugin&&s?.group===group&&(s.theme??s.pack)===id
                     entries.push({plugin,group,id,kind,name:String(item.name??id).slice(0,100),description:String(item.description??'').slice(0,180),
-                        imported:plugin===ID,active})
+                        imported:plugin===ID&&group===GROUP,own:plugin===ID&&group===OWN,active,
+                        preview:kind==='themes'?previewOf(store,plugin,group,id,item):[],
+                        detail:kind==='fontPacks'?Object.keys(item.families??{}).slice(0,5).join(', '):kind==='iconPacks'?Object.keys(item.icons??{}).length+' Icons':'',
+                        background:kind==='themes'&&typeof item.background?.path==='string'?item.background.path.slice(0,500):''})
                 }
-            }
-        }
-    }
-    return {themeState:{ready:true,entries}}
+    const bg=selected.background??{source:'theme'}
+    return {themeState:{ready:true,entries,background:bg,defaults:{themes:!selected.colors,fontPacks:!Object.keys(selected.fonts?.families??{}).length,iconPacks:!selected.icons,emojiPacks:!selected.emoji}}}
 }
-
-async function command(op:string,json:string) {
+async function command(op:string,json:string){
     const store=themeStore()
     if(!store)return snapshot(null)
-    await load()
+    await load();registerAll(store);patchMotion()
     const data=JSON.parse(json)
-    if(!data || typeof data!=='object')throw new Error('Ungültige Theme-Daten.')
+    if(!data||typeof data!=='object')throw new Error('Ungültige Theme-Daten.')
     if(op==='theme_import'){
-        if(Object.keys(imports).length>=50&&!imports[data.url])throw new Error('Maximal 50 importierte Themes.')
-        const theme=parseLegacyTheme(data.theme)
-        imports={...imports,[data.url]:theme}
-        await storage.set({imports},true)
-        registerImports(store)
-        // Import and selection are separate; the user can explicitly apply a theme.
-    } else if(op==='theme_apply'||op==='theme_reset'){
+        if(Object.keys(imports).length>=50&&!imports[data.url])throw new Error('Maximal 50 Theme-Importe.')
+        imports={...imports,[data.url]:parseLegacyTheme(data.theme)}
+        await storage.set({imports,fonts},true);registerAll(store,true)
+    }else if(op==='theme_font_import'){
+        if(Object.keys(fonts).length>=20&&!fonts[data.url])throw new Error('Maximal 20 Font-Packs.')
+        fonts={...fonts,[data.url]:data.pack};await storage.set({imports,fonts},true);registerAll(store,true)
+    }else if(op==='theme_apply'||op==='theme_reset'){
         const selection=op==='theme_reset'?null:data.plugin
-        const funcs:Record<string,string>={themes:'selectTheme',fontPacks:'selectFontPack',iconPacks:'selectIconPack',emojiPacks:'selectEmojiPack'}
-        const fn=funcs[data.kind]
+        const fn=({themes:'selectTheme',fontPacks:'selectFontPack',iconPacks:'selectIconPack',emojiPacks:'selectEmojiPack'} as Record<string,string>)[data.kind]
         if(!fn||typeof store[fn]!=='function')throw new Error('Theme-Typ nicht unterstützt.')
-        if(selection!==null){
-            const entry=store.themesStore.getState().groups[selection]?.[data.group]?.[data.kind]?.[data.id]
-            if(!entry)throw new Error('Theme oder Pack nicht mehr verfügbar.')
-        }
+        if(selection!==null&&!store.themesStore.getState().groups[selection]?.[data.group]?.[data.kind]?.[data.id])throw new Error('Pack nicht mehr verfügbar.')
         await store[fn](selection,data.group,data.id)
-    } else if(op==='theme_remove'){
-        if(!Object.prototype.hasOwnProperty.call(imports,data.url))throw new Error('Import nicht gefunden.')
-        const selection=store.themesStore.getState().selected.colors
-        if(selection?.plugin===ID&&selection.theme===data.url)await store.selectTheme(null)
-        const { [data.url]: _,...remaining }=imports
-        imports=remaining
-        await storage.set({imports},true)
-        store.unregisterAll(ID)
-        registerImports(store)
-    } else if(op!=='theme_snapshot')throw new Error('Unbekannte Theme-Aktion.')
+    }else if(op==='theme_remove'){
+        const isFont=data.kind==='fontPacks',map=isFont?fonts:imports
+        if(!Object.prototype.hasOwnProperty.call(map,data.url))throw new Error('Import nicht gefunden.')
+        const selected=store.themesStore.getState().selected
+        if(isFont&&Object.values(selected.fonts?.families??{}).some((f:any)=>f.plugin===ID&&f.pack===data.url))await store.selectFontPack(null)
+        if(!isFont&&selected.colors?.plugin===ID&&selected.colors.theme===data.url)await store.selectTheme(null)
+        const {[data.url]:_,...rest}=map
+        if(isFont)fonts=rest as Record<string,FontData>;else imports=rest as Record<string,ThemeData>
+        await storage.set({imports,fonts},true);store.unregisterAll(ID);registerAll(store,true)
+    }else if(op==='theme_background'){
+        if(typeof store.setBackgroundSettings!=='function')throw new Error('Background API fehlt.')
+        const clamp=(n:unknown,fallback:number,max=1)=>typeof n==='number'?Math.max(0,Math.min(max,n)):fallback
+        const source=data.source
+        if(!['theme','custom','none'].includes(source))throw new Error('Ungültige Hintergrundquelle.')
+        await store.setBackgroundSettings({source,...(source==='custom'?{path:data.path}:{}),opacity:clamp(data.opacity,1),blur:clamp(data.blur,0,40),dimming:clamp(data.dimming,.7)})
+    }else if(op!=='theme_snapshot')throw new Error('Unbekannte Theme-Aktion.')
     return snapshot(store)
 }
 
-// Registered on JS startup even when the upstream theme stubs have not updated yet.
-registerJSMethod('valancedx.manager.themes',async (operation:string,json:string)=>{
-    try { return JSON.stringify(await command(operation,json)) }
-    catch(e){return JSON.stringify({error:e instanceof Error?e.message:String(e)})}
-})
-try { (callNativeMethodSync as any)('valancedx.manager.themesReady',[]) } catch {}
+const motionColors:Record<string,string[]>={aurora:['#8d67dc','#40d8be'],bloom:['#e88ab6','#9c69db'],eclipse:['#5382de','#9272df']}
+function MotionLayer({styleName,opacity}:{styleName:string,opacity:number}){
+    const phase=useRef(new Animated.Value(0)).current
+    useEffect(()=>{
+        let animation:ReturnType<typeof Animated.loop>|undefined
+        const start=(state:string)=>{
+            animation?.stop()
+            if(state!=='active')return
+            animation=Animated.loop(Animated.sequence([
+                Animated.timing(phase,{toValue:1,duration:6200,easing:Easing.inOut(Easing.sin),useNativeDriver:true,isInteraction:false}),
+                Animated.timing(phase,{toValue:0,duration:6200,easing:Easing.inOut(Easing.sin),useNativeDriver:true,isInteraction:false}),
+            ]));animation.start()
+        }
+        start(AppState.currentState??'active')
+        const sub=AppState.addEventListener('change',start)
+        return()=>{animation?.stop();sub.remove()}
+    },[phase])
+    const colors=motionColors[styleName]??motionColors.aurora!
+    return createElement(View,{pointerEvents:'none',style:{position:'absolute',top:0,left:0,right:0,bottom:0,overflow:'hidden'}},
+        ...colors.map((color,i)=>createElement(Animated.View,{key:i,style:{position:'absolute',width:380,height:380,borderRadius:190,
+            top:i?120:-110,left:i?80:-140,backgroundColor:color,
+            opacity:phase.interpolate({inputRange:[0,1],outputRange:[.06*opacity,.28*opacity]}),
+            transform:[{translateX:phase.interpolate({inputRange:[0,1],outputRange:i?[0,-90]:[0,110]})},
+                {translateY:phase.interpolate({inputRange:[0,1],outputRange:i?[0,-40]:[0,70]})}]}})))
+}
+function patchMotion(){
+    if(motionCleanup)return
+    const cleanups:Array<()=>void>=[]
+    cleanups.push(getModules(withProps<any>('CustomThemedGradient','validateColors'),module=>{
+        if(typeof module.default!=='function')return
+        cleanups.push(after(module,'default',(result:any)=>{
+            // Only decorate the exact backing image produced by Valenced's own
+            // custom background pipeline. Never modify ordinary Discord screens.
+            if(!isValidElement(result))return result
+            const props:any=result.props,child=props?.children
+            const uri=child?.props?.source?.uri
+            const match=typeof uri==='string'&&uri.match(/\/veyra-motion-(aurora|bloom|eclipse)\.png$/)
+            if(!match)return result
+            return cloneElement(result as any,undefined,child,createElement(MotionLayer,{styleName:match[1],opacity:Number(child.props.style?.opacity??1)}))
+        }))
+    },{cached:false}))
+    motionCleanup=()=>{for(const cleanup of cleanups.reverse())try{cleanup()}catch{};motionCleanup=undefined}
+}
 
+// Dedicated request IDs: async plugin lifecycle replies cannot consume a theme response.
+const native=callNativeMethodSync as any
+async function poll(){
+    if(polling)return
+    polling=true
+    try{
+        const raw=native('valancedx.manager.themeClaim',[])
+        if(!raw)return
+        const request=JSON.parse(raw)
+        let result:any
+        try{result=await command(request.operation,request.data)}
+        catch(e){result={error:e instanceof Error?e.message:String(e)}}
+        native('valancedx.manager.themeFinish',[request.id,JSON.stringify(result)])
+    }catch{}finally{polling=false}
+}
+setInterval(()=>{void poll()},650)
 registerInternalPlugin(manifest,{
-    async start(){
+    async start({cleanup}){
         const store=themeStore()
-        if(!store)return
-        await load()
-        registerImports(store)
+        if(store){await load();registerAll(store);patchMotion()}
+        cleanup(()=>{motionCleanup?.()})
     },
 })

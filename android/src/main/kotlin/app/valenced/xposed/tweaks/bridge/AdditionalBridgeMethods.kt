@@ -6,12 +6,18 @@ import app.valenced.xposed.api.registerNativeMethod
 import app.valenced.xposed.openFileGuarded
 import app.valenced.xposed.tweak
 import app.valenced.xposed.tweaks.plugins.ManagerPluginWorker
+import app.valenced.xposed.tweaks.plugins.ManagerThemeRequests
 import java.io.File
 
 /**
  * `valenced.fs.*` + `valenced.app.*` bridge methods.
  */
 val additionalBridgeMethods by tweak {
+    registerNativeMethod("valancedx.manager.themeClaim") { ManagerThemeRequests.claim() }
+    registerNativeMethod("valancedx.manager.themeFinish") { args ->
+        ManagerThemeRequests.finish(args.getOrNull(0) as? String ?: "",args.getOrNull(1) as? String ?: "")
+        null
+    }
     registerNativeMethod("valancedx.manager.themesReady") {
         ManagerPluginWorker.markThemesReady()
         null

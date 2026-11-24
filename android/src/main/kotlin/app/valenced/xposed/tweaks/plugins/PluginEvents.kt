@@ -72,6 +72,10 @@ internal fun emitDependencyGraphUpdate() {
 /** Tells JS a plugin's flags changed in [slotId]. */
 context(host: HostScope)
 internal suspend fun sendStateToJS(slotId: String, pluginId: String, flags: Set<PluginFlags>) {
-    runSuspendCatching { host.callJSMethod(STATE_UPDATE, listOf(slotId, pluginId, flags.toJSPayload())) }
-        .onFailure { pluginLog.e("Failed to send state of $pluginId in slot '$slotId'", it) }
+    suspend fun notifyState() {
+        runSuspendCatching { host.callJSMethod(STATE_UPDATE, listOf(slotId, pluginId, flags.toJSPayload())) }
+            .onFailure { pluginLog.e("Failed to send state of $pluginId in slot '$slotId'", it) }
+    }
+    if(kotlin.coroutines.coroutineContext[ManagerPluginProgress]!=null)pluginJobScope.launch { notifyState() }
+    else notifyState()
 }
