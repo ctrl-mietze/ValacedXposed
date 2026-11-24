@@ -31,7 +31,7 @@ Vexcord extends the existing Discord Android client through an Xposed-compatible
 | **Plugin Manager** | Compact installed/discover/source/legacy tabs, live connection, dependency-aware installation, grouped source variants |
 | **Vencord Compiler** | Full pinned inventory of 167 plugins; 57 mapped entries, 56 distinct mobile targets |
 | **Vexcord SDK v1** | Scoped hooks, Metro discovery, Flux observation, local storage, outgoing/edit text adapters, automatic cleanup |
-| **Theme Studio** | 13 dual-layer motion themes, palettes, imported themes, fonts, icons and emojis |
+| **Theme Studio** | 13 motion themes with dual gradients and classic moving light circles, palettes, imported themes, fonts, icons and emojis |
 | **Plugin Lab** | Isolated Android-process static analysis and bounded simulated JavaScript lifecycle |
 | **Runtime** | Kotlin/Xposed bootstrap, React Native/Hermes integration, local diagnostics and recovery |
 
@@ -56,7 +56,7 @@ The complete [translation matrix](docs/VENCORD_TRANSLATION_MATRIX.md) includes t
 3. Fully restart Discord and open Vexcord.
 4. Under **Module**, enable Vencord integration to expose prepared mobile ports in the ordinary **Plugins** list.
 
-**Updating from ValancedX:** retain the existing package and signing certificate. Do not uninstall the previous app first. Vexcord 1.0.27 keeps `ctrl.mietze.valacedxposed`, the existing compatibility IDs, source configuration and plugin storage paths. Read the [migration guide](docs/INSTALL.md).
+**Updating from ValancedX:** retain the existing package and signing certificate. Do not uninstall the previous app first. Vexcord keeps `ctrl.mietze.valacedxposed`, the existing compatibility IDs, source configuration and plugin storage paths. Read the [migration guide](docs/INSTALL.md).
 
 ## Developer experience
 

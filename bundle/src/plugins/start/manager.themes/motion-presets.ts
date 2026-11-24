@@ -379,3 +379,23 @@ export function ambientOpacity(base:unknown,progress:number):number{
     const weight=typeof base==='number'&&Number.isFinite(base)?Math.max(0,Math.min(1,base)):1
     return weight*(.24+.20*Math.max(0,Math.min(1,progress)))
 }
+
+/** Original geometric motion from ValancedX 1.0.18. Retain the original
+ * colors and positions for the first three themes, extend to newer palettes. */
+const classicColors:Record<string,readonly [string,string]>={
+    aurora:['#8d67dc','#40d8be'],
+    bloom:['#e88ab6','#9c69db'],
+    eclipse:['#5382de','#9272df'],
+}
+export const classicHalfDuration=6200
+export const classicOrbs=[
+    {size:380,left:-140,top:-110,dx:110,dy:70},
+    {size:380,left:80,top:120,dx:-90,dy:-40},
+] as const
+export function classicOrbColors(preset:MotionPreset):readonly [string,string]{
+    return classicColors[preset.id]??[preset.glowA,preset.glowB]
+}
+export function classicOpacity(base:unknown,progress:number):number{
+    const weight=typeof base==='number'&&Number.isFinite(base)?Math.max(0,Math.min(1,base)):1
+    return weight*(.06+.22*Math.max(0,Math.min(1,progress)))
+}

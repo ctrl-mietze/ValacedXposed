@@ -38,6 +38,21 @@ internal class DiscordThemePreview(context:Context, private val colors:IntArray,
             canvas.saveLayerAlpha(0f,0f,320f,h,alpha)
             VxMotionRenderer.drawAmbient(canvas,320f,h,motion,secondPhase)
             canvas.restore()
+            // Match the original native 380dp circles, using screen-width
+            // scaling in the miniature and the same sinusoidal 12.4s cycle.
+            val cycle=(android.os.SystemClock.uptimeMillis()%12400L)/12400.0
+            val orbPhase=((1-kotlin.math.cos(cycle*2*Math.PI))*.5).toFloat()
+            val orbAlpha=(255*(.06f+.22f*orbPhase)).toInt()
+            val orbColors=VxMotionPresets.classicColors(motion)
+            val ratio=320f/360f
+            val orbs=listOf(floatArrayOf(-140f,-110f,110f,70f),floatArrayOf(80f,120f,-90f,-40f))
+            p.shader=null
+            for((i,orb) in orbs.withIndex()){
+                p.color=orbColors[i]
+                p.alpha=orbAlpha
+                canvas.drawCircle((orb[0]+190f+orb[2]*orbPhase)*ratio,(orb[1]+190f+orb[3]*orbPhase)*ratio,190f*ratio,p)
+            }
+            p.alpha=255
             canvas.restore()
         }else if(animated){
             val phase=(android.os.SystemClock.uptimeMillis()%10000L)/10000f

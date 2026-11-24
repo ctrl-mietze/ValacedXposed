@@ -5,10 +5,10 @@ import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import { after } from '@valenced/patcher'
 import { Children, Fragment, createElement, cloneElement, isValidElement, useEffect, useRef } from 'react'
-import { Animated, AppState, Easing, AccessibilityInfo, StyleSheet } from 'react-native'
+import { Animated, AppState, Easing, AccessibilityInfo, StyleSheet, View } from 'react-native'
 import manifest from './manifest.json'
 import { palettes, ownTheme, previewPalette, previewTokens } from './palettes'
-import { motionPresets, motionById, motionIdFromUri, ambientSource, ambientDuration, ambientOpacity } from './motion-presets'
+import { motionPresets, motionById, motionIdFromUri, ambientSource, ambientDuration, ambientOpacity, classicHalfDuration, classicOrbs, classicOrbColors, classicOpacity } from './motion-presets'
 const allPalettes=[...palettes,...motionPresets.map(p=>p.palette)]
 const renderedMotion=new Set<string>()
 
@@ -195,24 +195,26 @@ async function command(op:string,json:string){
     return snapshot(store)
 }
 
-/** Two independently animated image layers inside Discord's clipped
+/** Two independently animated image layers and classic geometric orbs inside Discord's clipped
  * background container. The chat, messages, icons and media are untouched. */
 function MotionImage({id,imageProps}:{id:string,imageProps:any}){
     const preset=motionById.get(id)!
     const phase=useRef(new Animated.Value(0)).current
     const ambient=useRef(new Animated.Value(0)).current
+    const classic=useRef(new Animated.Value(0)).current
     useEffect(()=>{
         let alive=true
         let reduced=false
         let active=AppState.currentState??'active'
         let animation:ReturnType<typeof Animated.loop>|undefined
         let lightAnimation:ReturnType<typeof Animated.loop>|undefined
+        let classicAnimation:ReturnType<typeof Animated.loop>|undefined
         const update=()=>{
-            animation?.stop();lightAnimation?.stop()
+            animation?.stop();lightAnimation?.stop();classicAnimation?.stop()
             if(!alive)return
-            if(reduced){phase.setValue(0);ambient.setValue(0);return}
+            if(reduced){phase.setValue(0);ambient.setValue(0);classic.setValue(0);return}
             if(active!=='active')return
-            phase.setValue(0);ambient.setValue(0)
+            phase.setValue(0);ambient.setValue(0);classic.setValue(0)
             animation=Animated.loop(Animated.timing(phase,{
                 toValue:1,duration:preset.duration*2,easing:Easing.linear,
                 useNativeDriver:true,isInteraction:false
@@ -221,7 +223,11 @@ function MotionImage({id,imageProps}:{id:string,imageProps:any}){
                 toValue:1,duration:ambientDuration(preset),easing:Easing.linear,
                 useNativeDriver:true,isInteraction:false
             }))
-            animation.start();lightAnimation.start()
+            classicAnimation=Animated.loop(Animated.sequence([
+                Animated.timing(classic,{toValue:1,duration:classicHalfDuration,easing:Easing.inOut(Easing.sin),useNativeDriver:true,isInteraction:false}),
+                Animated.timing(classic,{toValue:0,duration:classicHalfDuration,easing:Easing.inOut(Easing.sin),useNativeDriver:true,isInteraction:false}),
+            ]))
+            animation.start();lightAnimation.start();classicAnimation.start()
         }
         const subscription=AppState.addEventListener('change',state=>{active=state;update()})
         const accessibility=AccessibilityInfo?.addEventListener?.('reduceMotionChanged',value=>{reduced=value;update()})
@@ -231,10 +237,10 @@ function MotionImage({id,imageProps}:{id:string,imageProps:any}){
         }).catch(()=>{if(alive)update()})
         if(!renderedMotion.has(id)){
             renderedMotion.add(id)
-            nativeLoggingHook('[ValancedX Motion] Dual layers rendered '+id,1)
+            nativeLoggingHook('[ValancedX Motion] Classic orbs + dual layers rendered '+id,1)
         }
-        return()=>{alive=false;animation?.stop();lightAnimation?.stop();subscription.remove();accessibility?.remove()}
-    },[phase,ambient,id,preset.duration])
+        return()=>{alive=false;animation?.stop();lightAnimation?.stop();classicAnimation?.stop();subscription.remove();accessibility?.remove()}
+    },[phase,ambient,classic,id,preset.duration])
     const flat=StyleSheet.flatten(imageProps.style)??{}
     const width=typeof flat.width==='number'?flat.width:360
     const height=typeof flat.height==='number'?flat.height:720
@@ -273,7 +279,27 @@ function MotionImage({id,imageProps}:{id:string,imageProps:any}){
             ],
         }]
     })
-    return createElement(Fragment,null,base,light)
+    // Exactly the original 380dp clipped translucent circles. Use the
+    // original absolute positioning inside the same background-only view.
+    // Neither the touch targets nor the foreground React tree are changed.
+    const colors=classicOrbColors(preset)
+    const orbs=createElement(View,{
+        key:'classic-orbs',pointerEvents:'none',accessible:false,
+        importantForAccessibility:'no-hide-descendants',
+        style:{position:'absolute',top:0,left:0,right:0,bottom:0,overflow:'hidden'}
+    },...classicOrbs.map((orb,i)=>createElement(Animated.View,{
+        key:i,pointerEvents:'none',accessible:false,
+        style:{
+            position:'absolute',width:orb.size,height:orb.size,borderRadius:orb.size/2,
+            left:orb.left,top:orb.top,backgroundColor:colors[i],
+            opacity:classic.interpolate({inputRange:[0,1],outputRange:[classicOpacity(flat.opacity,0),classicOpacity(flat.opacity,1)]}),
+            transform:[
+                {translateX:classic.interpolate({inputRange:[0,1],outputRange:[0,orb.dx]})},
+                {translateY:classic.interpolate({inputRange:[0,1],outputRange:[0,orb.dy]})}
+            ]
+        }
+    })))
+    return createElement(Fragment,null,base,light,orbs)
 }
 function patchMotion(){
     if(motionCleanup)return

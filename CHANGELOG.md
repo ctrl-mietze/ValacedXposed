@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.28 — Classic Motion
+
+- Restores the original moving translucent circles from ValancedX 1.0.18 for all thirteen Motion themes, in addition to the existing image and ambient layers.
+- Keeps original sizes, positions, motion paths, colors for the initial three presets and 12.4-second cycle.
+- Respects reduced motion, background opacity and foreground lifecycle. No changes to the selected theme, plugins, source settings or data paths.
+
 ## 1.0.27 — Vexcord
 
 - Standalone GitHub repository with preserved upstream history.

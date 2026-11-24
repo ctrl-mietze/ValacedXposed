@@ -1298,7 +1298,7 @@ class ValancedXActivity : Activity() {
             add(this,button("+ Bild-URL"){urlPrompt("Hintergrundbild","https://…/image.png"){url->apply(payload("custom").put("path",url))}},top=8)
         }
         eyebrow(parent,"ANIMIERTE THEMES · "+VxMotionPresets.all.size)
-        add(parent,label("Ein Theme verbindet eine eigene Farbpalette mit einem animierten Hintergrund. Alternativ nur den Hintergrund übernehmen.",12f,mutedColor),top=6)
+        add(parent,label("Farbpalette, animierter Hintergrund und die klassischen schwebenden Lichtkreise. Alternativ nur den Hintergrund übernehmen.",12f,mutedColor),top=6)
         val designs=VxMotionPresets.all.sortedWith(compareByDescending<VxMotionPresets.Preset>{it.id==currentMotion?.id}.thenByDescending{it.id=="ruby-violet"})
         for(preset in designs){
             card(parent,top=9){
@@ -1313,7 +1313,7 @@ class ValancedXActivity : Activity() {
                 title.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
                 if(bgActive)title.addView(label(if(fullActive)"Aktiv" else "Hintergrund aktiv",10f,mintColor,true))
                 add(this,title)
-                add(this,label(when(preset.motion){"orbit"->"ORBIT";"pulse"->"PULSE";"sweep"->"SWEEP";else->"DRIFT"}+"  ·  "+(preset.duration*2/1000)+" s Loop · Dual Layer",10f,android.graphics.Color.parseColor(preset.accent),true),top=6)
+                add(this,label(when(preset.motion){"orbit"->"ORBIT";"pulse"->"PULSE";"sweep"->"SWEEP";else->"DRIFT"}+"  ·  "+(preset.duration*2/1000)+" s Loop · Classic Motion",10f,android.graphics.Color.parseColor(preset.accent),true),top=6)
                 addView(DiscordThemePreview(this@ValancedXActivity,DiscordThemePreview.palette(preset.preview(),currentTheme),true,preset),
                     LinearLayout.LayoutParams(-1,dp(168)).apply{topMargin=dp(10)})
                 val swatches=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}

@@ -28,6 +28,12 @@ internal object VxMotionPresets {
         Preset("sunset","Sunset Flame","Orange, Koralle und Magenta · Abendhimmel","#100911","#bb4a40","#7c2965","#ffc1ac",7900L,"orbit",0.38,listOf("#100911","#1a1822","#313642","#ffc1ac","#f4f6fc","#ffc1ac","#1f1f2a","#232631","#a8afbf","#4e464b","#523338")),
         Preset("ruby-violet","Ruby Violet","Rubinrot und tiefes Lila · zwei schwebende Nebelschichten","#0a0610","#b3123f","#6c2bd9","#d98cff",9000L,"orbit",0.34,listOf("#0a0610","#17131f","#211a2c","#d98cff","#f5f2ff","#d98cff","#1e1828","#14101b","#b4abc9","#3a2e4a","#40224f"))
     )
+    fun classicColors(preset:Preset):List<Int> = (when(preset.id){
+        "aurora"->listOf("#8d67dc","#40d8be")
+        "bloom"->listOf("#e88ab6","#9c69db")
+        "eclipse"->listOf("#5382de","#9272df")
+        else->listOf(preset.glowA,preset.glowB)
+    }).map{Color.parseColor(it)}
     fun ambientDuration(preset:Preset):Long=if(preset.id=="ruby-violet")12400L else maxOf(10000L,kotlin.math.round(preset.duration*1.37).toLong())
     fun get(id:String)=all.firstOrNull{it.id==id}
     fun fromPath(path:String):Preset? {

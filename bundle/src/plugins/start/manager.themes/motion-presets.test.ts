@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {motionPresets,motionById,motionIdFromUri,ambientSource,ambientDuration,ambientOpacity} from './motion-presets'
+import {motionPresets,motionById,motionIdFromUri,ambientSource,ambientDuration,ambientOpacity,classicOrbs,classicHalfDuration,classicOrbColors,classicOpacity} from './motion-presets'
 import {ownTheme,contrast,previewPalette} from './palettes'
 describe('Veyra Motion Studio',()=>{
     it('preserves old IDs and includes Ruby Violet',()=>{
@@ -31,6 +31,18 @@ describe('Veyra Motion Studio',()=>{
         expect(ambientOpacity(.5,1)).toBeCloseTo(.22)
         expect(ambientOpacity(1,0)).toBeCloseTo(.24)
         expect(ambientDuration(motionById.get('ruby-violet')!)).toBe(12400)
+    })
+    it('restores the exact classic 1.0.18 geometry and timing for all presets',()=>{
+        expect(classicHalfDuration*2).toBe(12400)
+        expect(classicOrbs).toEqual([{size:380,left:-140,top:-110,dx:110,dy:70},{size:380,left:80,top:120,dx:-90,dy:-40}])
+        expect(classicOrbColors(motionById.get('aurora')!)).toEqual(['#8d67dc','#40d8be'])
+        expect(classicOrbColors(motionById.get('bloom')!)).toEqual(['#e88ab6','#9c69db'])
+        expect(classicOrbColors(motionById.get('eclipse')!)).toEqual(['#5382de','#9272df'])
+        for(const p of motionPresets)expect(classicOrbColors(p)).toHaveLength(2)
+        expect(classicOpacity(0,1)).toBe(0)
+        expect(classicOpacity(1,0)).toBeCloseTo(.06)
+        expect(classicOpacity(1,1)).toBeCloseTo(.28)
+        expect(classicOpacity(.5,1)).toBeCloseTo(.14)
     })
     it('preserves readable surfaces and palette structure',()=>{
         for(const p of motionPresets){
