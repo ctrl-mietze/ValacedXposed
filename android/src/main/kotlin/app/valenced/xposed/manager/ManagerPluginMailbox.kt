@@ -15,7 +15,7 @@ internal object ManagerPluginMailbox {
     private var snapshot: String? = null
     @Synchronized fun cachedSnapshot(): String? = snapshot
     private val allowed = setOf("snapshot", "refresh", "refresh_repo", "preview_repo", "add_repo", "toggle_repo", "remove_repo",
-        "plan", "install", "install_direct", "enable", "disable", "uninstall", "legacy_preview", "legacy_install",
+        "plan", "install", "install_direct", "enable", "disable", "uninstall", "legacy_preview", "legacy_install", "legacy_mode",
         "theme_snapshot", "theme_import", "theme_apply", "theme_reset", "theme_remove", "theme_font_import", "theme_background")
     @Synchronized fun submit(operation: String, payload: JSONObject): String {
         require(operation in allowed)

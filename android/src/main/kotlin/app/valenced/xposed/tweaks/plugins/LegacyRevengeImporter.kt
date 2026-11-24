@@ -69,7 +69,7 @@ internal object LegacyRevengeImporter {
             .put("name",legacy.getString("name").take(100))
             .put("description",("[Revenge Legacy] "+legacy.optString("description")).take(500))
             .put("author",author).put("version","1.0.0")
-            .put("dependencies",JSONObject().put("valenced.api",JSONObject()).put("discord",JSONObject()))
+            .put("dependencies",JSONObject().put("valenced.api",JSONObject()).put("discord",JSONObject()).put("veyra.legacy.compat",JSONObject()))
             .put("dist",JSONObject().put("script","index.js"))
         val candidate=Candidate(UUID.randomUUID().toString(),manifestUrl.toString(),manifest,bytes,digest)
         pending=candidate

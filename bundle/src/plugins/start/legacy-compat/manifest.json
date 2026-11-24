@@ -1,0 +1,8 @@
+{
+    "id": "veyra.legacy.compat",
+    "name": "Revenge Compatibility",
+    "description": "Opt-in for older Revenge/Vendetta plugins and native Veyra ports.",
+    "author": "Veyra",
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false
+}

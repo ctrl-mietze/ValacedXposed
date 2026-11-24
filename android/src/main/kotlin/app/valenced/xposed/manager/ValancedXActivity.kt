@@ -994,7 +994,7 @@ class ValancedXActivity : Activity() {
     private var restartRunning=false
     private var lastActionKey:String?=null
     private val actionControls=mutableMapOf<String,TextView>()
-    private fun actionKey(op:String,data:JSONObject):String=op+"|"+data.optString("id")+"|"+data.optString("url")+"|"+data.optString("repo")+"|"+data.optString("motion")
+    private fun actionKey(op:String,data:JSONObject):String=op+"|"+data.optString("id")+"|"+data.optString("url")+"|"+data.optString("repo")+"|"+data.optString("motion")+"|"+data.optString("enabled")
     private fun operationButton(title:String,op:String,data:JSONObject=JSONObject(),primary:Boolean=false):TextView {
         val key=actionKey(op,data)
         return button(title,primary) { pluginAction(op,data) }.apply {
@@ -1378,28 +1378,76 @@ class ValancedXActivity : Activity() {
     }
 
     private fun legacyScreen(parent:LinearLayout) {
+        val installed=pluginData?.optJSONArray("installed")?:JSONArray()
+        val entries=(0 until installed.length()).mapNotNull{installed.optJSONObject(it)}
+        val mode=pluginData?.optBoolean("legacyEnabled")?:entries.any{it.optString("id")=="veyra.legacy.compat"&&it.optBoolean("enabled")}
         eyebrow(parent,"REVENGE COMPATIBILITY")
         card(parent,top=9){
-            add(this,label("Legacy Port",23f,whiteColor,true))
-            add(this,label("Experimenteller Adapter für ältere Revenge-/Vendetta-JavaScript-Plugins. Der Import installiert nur den gewählten Code, zunächst deaktiviert.",13f,mutedColor),top=7)
-            add(this,button("+ Plugin-URL importieren",true){urlPrompt("Revenge Plugin","https://…/manifest.json"){url->pluginAction("legacy_preview",JSONObject().put("url",url))}},top=12)
-            add(this,label("Nicht unterstützt: native Revenge-JARs, Revenge Next ZIPs und nicht implementierte alte APIs. Alte Discord-Hooks können weiterhin inkompatibel sein.",12f,warmColor),top=9)
+            val row=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}
+            val title=column()
+            add(title,label("Revenge Legacy",22f,whiteColor,true))
+            add(title,label(if(mode)"Kompatibilitätsmodus aktiv" else "Optionaler Kompatibilitätsmodus",12f,if(mode)mintColor else mutedColor),top=4)
+            row.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+            row.addView(Switch(this@ValancedXActivity).apply{
+                isChecked=mode;isEnabled=pluginJob==null;contentDescription="Revenge Compatibility";applySwitchPalette(this)
+                setOnCheckedChangeListener{_,enabled->pluginAction("legacy_mode",JSONObject().put("enabled",enabled))}
+            })
+            add(this,row)
+            add(this,label("Die alten JS-Plugins und sechs separat integrierte Ports werden nur bei aktiviertem Modus angeboten. Kein Plugin wird automatisch eingeschaltet.",12f,mutedColor),top=8)
+            if(mode)twoActions(this,button("+ Plugin-URL",true){urlPrompt("Revenge Plugin","https://…/manifest.json"){url->pluginAction("legacy_preview",JSONObject().put("url",url))}},
+                button("Discord neu starten"){restartDiscord()})
+            else add(this,operationButton("Kompatibilität aktivieren","legacy_mode",JSONObject().put("enabled",true),true),top=10)
         }
-        eyebrow(parent,"NEXPID / REVENGE")
-        for((name,slug) in listOf("Char Counter" to "char-counter","Clean URLs" to "clean-urls","Tenor Gif Fix" to "tenor-gif-fix",
-            "Use System Emoji" to "use-system-emoji","Twemoji Everywhere" to "twemoji-everywhere","Themes+" to "themes-plus"))card(parent,top=8){
-            add(this,label(name,16f,whiteColor,true))
-            add(this,label("Legacy · revenge.nexpid.xyz",11f,warmColor),top=4)
-            add(this,button("Port prüfen"){pluginAction("legacy_preview",JSONObject().put("url","https://revenge.nexpid.xyz/"+slug+"/manifest.json"))},top=8)
+        if(!mode)return
+        eyebrow(parent,"VEYRA · NATIVE PORTS")
+        val ports=entries.filter{it.optString("id").startsWith("veyra.port.")}
+        add(parent,label("Sechs unabhängige Neuimplementierungen klassischer Plugins. Einzelne Ports können einen Discord-Neustart benötigen.",12f,mutedColor),top=5)
+        if(ports.isEmpty())add(parent,label("Plugin-Liste wird synchronisiert.",12f,mutedColor),top=6)
+        for(item in ports.sortedBy{it.optString("name")})card(parent,top=8){
+            val id=item.optString("id")
+            val enabled=item.optBoolean("enabled")
+            tag="vx-legacy-port-"+id
+            add(this,label(item.optString("name"),17f,whiteColor,true))
+            add(this,label(item.optString("description"),12f,mutedColor),top=5)
+            statusRow(this,"Integrierter Port",if(item.optBoolean("failed"))"Fehler" else if(enabled)"Aktiviert" else "Aus",
+                if(item.optBoolean("failed"))errorColor else if(enabled)mintColor else mutedColor)
+            add(this,operationButton(if(enabled)"Deaktivieren" else "Aktivieren",if(enabled)"disable" else "enable",
+                JSONObject().put("id",id),!enabled),top=8)
         }
-        eyebrow(parent,"WEITERE KATALOGE")
-        card(parent,top=8){
-            add(this,label("Revenge Plugins",16f,whiteColor,true))
-            add(this,button("Nexpid-Katalog öffnen"){openWeb("https://github.com/nexpid/RevengePlugins")},top=8)
-            add(this,button("Revenge Next Archiv"){openWeb("https://github.com/revenge-mod/revenge-community-plugins")},top=7)
+        eyebrow(parent,"IMPORTIERTE LEGACY-PLUGINS")
+        val imported=entries.filter{it.optString("id").startsWith("veyra.legacy.")&&it.optString("id")!="veyra.legacy.compat"}
+        if(imported.isEmpty())add(parent,label("Noch keine Original-Plugins importiert.",12f,mutedColor),top=7)
+        for(item in imported)card(parent,top=8){
+            val id=item.optString("id");val enabled=item.optBoolean("enabled")
+            tag="vx-legacy-import-"+id
+            add(this,label(item.optString("name"),16f,whiteColor,true))
+            add(this,label(item.optString("description"),12f,mutedColor),top=5)
+            statusRow(this,"Original-JS",if(item.optBoolean("failed"))"Fehler" else if(enabled)"Aktiviert" else "Aus",
+                if(item.optBoolean("failed"))errorColor else if(enabled)mintColor else mutedColor)
+            add(this,operationButton(if(enabled)"Deaktivieren" else "Aktivieren",if(enabled)"disable" else "enable",JSONObject().put("id",id)),top=8)
+            add(this,button("Deinstallieren",destructive=true){
+                AlertDialog.Builder(this@ValancedXActivity).setTitle("Legacy-Plugin entfernen?")
+                    .setNegativeButton("Abbrechen",null).setPositiveButton("Entfernen"){_,_->pluginAction("uninstall",JSONObject().put("id",id))}.show()
+            },top=7)
         }
+        eyebrow(parent,"ORIGINALQUELLEN · EXPERIMENTELL")
+        add(parent,label("Veröffentlichte alte JS-Bundles. Import mit Manifest und Hash-Prüfung; keine universelle Laufzeitkompatibilität.",12f,mutedColor),top=6)
+        val originals=listOf(
+            "Char Counter" to "char-counter","Clean URLs" to "clean-urls","Message Preview" to "message-preview",
+            "Use System Emoji" to "use-system-emoji","Twemoji Everywhere" to "twemoji-everywhere","Themes+" to "themes-plus",
+            "Tenor Gif Fix" to "tenor-gif-fix","Local Pins" to "local-pins","NexxUtils" to "nexxutils")
+            .map{it.first to ("https://revenge.nexpid.xyz/"+it.second+"/manifest.json")}+
+            listOf("No Typing" to "no-typing","Picture Links" to "picture-links","No Embed Copy" to "no-embed-copy")
+            .map{it.first to ("https://redstonekasi.github.io/vendetta-plugins/"+it.second+"/manifest.json")}
+        for((name,url) in originals)card(parent,top=8){
+            tag="vx-legacy-url-"+url
+            add(this,label(name,15f,whiteColor,true))
+            add(this,label(Uri.parse(url).host.orEmpty()+" · Original-JS",11f,warmColor),top=4)
+            add(this,operationButton("Import prüfen","legacy_preview",JSONObject().put("url",url)),top=7)
+        }
+        add(parent,label("Revenge Next ZIPs mit nativen Komponenten und JARs sind weiterhin nicht unterstützt.",12f,mutedColor),top=12)
+        twoActions(parent,button("Revenge Archiv"){openWeb("https://github.com/revenge-mod/revenge-community-plugins")},button("Vendetta Archiv"){openWeb("https://vd-plugins.github.io/web/")})
     }
-
 
     private fun pluginScreen(parent: LinearLayout) {
         eyebrow(parent, "PLUGIN MANAGER")
@@ -1434,6 +1482,12 @@ class ValancedXActivity : Activity() {
             discoveryControls.clear()
             val entries = pluginData?.optJSONArray(if (pluginPage == 0) "installed" else "available") ?: JSONArray()
             val filtered = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
+                .filter { item ->
+                    // The dedicated Legacy page owns these controls. External
+                    // imports remain visible there even after the mode is reenabled.
+                    val id=item.optString("id")
+                    pluginPage!=0||(!id.startsWith("veyra.port.")&&!id.startsWith("veyra.legacy."))
+                }
                 .filter { item -> listOf("name","description","id","author").any { item.optString(it).contains(pluginQuery, ignoreCase = true) } }
                 .sortedBy { it.optString("name").lowercase(Locale.ROOT) }
             eyebrow(list, "${filtered.size} Plugins")

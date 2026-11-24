@@ -1,0 +1,19 @@
+{
+    "id": "veyra.port.pastelize",
+    "name": "Pastelize",
+    "description": "Dezente, deterministische Namensfarben für Benutzer ohne Rollenfarbe.",
+    "author": {
+        "name": "Veyra · Port of Cynosphere",
+        "links": [
+            {
+                "url": "https://github.com/skullbite/VendettaPlugins/tree/f4ae4485ca22701526dff4edc5bc206302d0b599/plugins/Pastelize",
+                "title": "Original legacy source"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {
+        "veyra.legacy.compat": {}
+    }
+}

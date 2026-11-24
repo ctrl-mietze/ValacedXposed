@@ -1,5 +1,7 @@
 import { JsonStorage, pluginStoragePathFor } from '@valenced/json-storage'
 import type { PluginOptionsFactory } from '../types'
+import { pList } from './registry'
+import { isPluginEnabled } from './predicates'
 
 /** Limited Revenge/Vendetta JS compatibility. A plugin runs with Discord's
  * own privileges, just like a native Valenced JS plugin. Never auto-enable. */
@@ -24,6 +26,9 @@ export function createLegacyOptionsFactory(id: string, source: string): PluginOp
         }
         return {
             async start(api) {
+                const compat=pList.get('veyra.legacy.compat')
+                // Also covers imported bundles created before the new manifest dependency.
+                if(!compat||!isPluginEnabled(compat))throw new Error('Revenge Compatibility is disabled')
                 const u: any = api.unscoped
                 const store: any = new (JsonStorage as any)(pluginStoragePathFor(id, 'revenge.json'), { default: {} })
                 const data = await store.get() ?? {}
@@ -57,20 +62,26 @@ export function createLegacyOptionsFactory(id: string, source: string): PluginOp
                 const ReactNative = u.react.ReactNative
                 const finders = u.modules.finders
                 const filters = finders.filters
-                const lookup = (filter: any, all = false) => {
-                    if (all) return Array.from(finders.lookupModules(filter,{cached:false}), (x: any) => x[0]).filter(Boolean)
-                    return finders.lookupModule(filter,{cached:false})[0]
+                const lookup = (filter: any, all = false, namespace = false) => {
+                    const options={cached:false,returnNamespace:namespace}
+                    if (all) return Array.from(finders.lookupModules(filter,options), (x: any) => x[0]).filter(Boolean)
+                    return finders.lookupModule(filter,options)[0]
                 }
                 const findByProps = (...props: string[]) => props.length ? lookup(filters.withProps(...props)) : undefined
-                const findByName = (name: string) => lookup(filters.withName(name))
+                const findByName = (name: string, defaultExport = true) => lookup(filters.withName(name),false,!defaultExport)
                 const findByStoreName = (name: string) => u.discord.flux.Stores[name]
-                const findByDisplayName = (name: string) => {
+                const findByDisplayName = (name: string, defaultExport = true) => {
                     const make = filters.createFilterGenerator
                     const filter = make((_: any, _id: any, value: any) => value?.displayName === name,
                         () => 'veyra.legacy.display.' + name, filters.FilterScopes.Initialized)()
-                    return lookup(filter)
+                    return lookup(filter,false,!defaultExport)
                 }
                 const common: any = { React, ReactNative }
+                const findByTypeName=(name:string,defaultExport=true)=>{
+                    const f=filters.createFilterGenerator((_:any,_id:any,v:any)=>v?.type?.name===name||v?.type?.displayName===name,
+                        ()=> 'veyra.legacy.type.'+name,filters.FilterScopes.Initialized)()
+                    return lookup(f,false,!defaultExport)
+                }
                 const getters: Record<string, () => any> = {
                     FluxDispatcher: () => findByProps('dispatch','subscribe','unsubscribe'),
                     NavigationNative: () => u.externals.ReactNavigation.ReactNavigationNative,
@@ -88,13 +99,13 @@ export function createLegacyOptionsFactory(id: string, source: string): PluginOp
                     let unpatch: () => void
                     const off = u.patcher.instead(parent,key,function(this: any,args: any[],original: any) {
                         if (once) unpatch()
-                        if (mode === 'instead') return callback(args,original.bind(this))
+                        if (mode === 'instead') return callback.call(this,args,original.bind(this))
                         if (mode === 'before') {
-                            const changed = callback(args)
+                            const changed = callback.call(this,args)
                             return Reflect.apply(original,this,Array.isArray(changed) ? changed : args)
                         }
                         const result = Reflect.apply(original,this,args)
-                        const changed = callback(args,result)
+                        const changed = callback.call(this,args,result)
                         return changed === undefined ? result : changed
                     })
                     let removed=false
@@ -110,7 +121,7 @@ export function createLegacyOptionsFactory(id: string, source: string): PluginOp
                 const apiObject: any = {
                     metro: { common, findByProps, findByPropsAll: (...p:string[]) => lookup(filters.withProps(...p),true),
                         findByName,findByStoreName,findByDisplayName,
-                        findByTypeName: findByName,
+                        findByTypeName,findByNameAll:(name:string,defaultExport=true)=>lookup(filters.withName(name),true,!defaultExport),
                     },
                     patcher: {
                         before: (k:string,p:any,c:any,o?:boolean)=>patch('before',k,p,c,o),
@@ -143,6 +154,8 @@ export function createLegacyOptionsFactory(id: string, source: string): PluginOp
                         without: (obj:any,...keys:string[])=>Object.fromEntries(Object.entries(obj).filter(([key])=>!keys.includes(key))),
                     },
                     ui: {
+                        get rawColors(){return findByProps('RawColor','SemanticColor')?.RawColor??{}},
+                        get semanticColors(){return findByProps('RawColor','SemanticColor')?.default?.colors??{}},
                         assets:{getAssetIDByName:u.assets.getAssetIdByName,getAssetByName:u.assets.getAssetByName},
                         alerts:{
                             showConfirmationAlert:(opts:any)=>ReactNative.Alert.alert(String(opts.title??'Revenge Plugin'),
@@ -163,6 +176,7 @@ export function createLegacyOptionsFactory(id: string, source: string): PluginOp
                 // Existing compiled scripts are expressions (typically an IIFE).
                 // Never evaluate downloaded script during import or preInit.
                 try {
+                    api.cleanup(clean)
                     const result = new Function('vendetta','revenge','bunny',
                         'return ('+source.trim().replace(/;+\s*$/,'')+'\n)\n//# sourceURL=ValancedX:Legacy:'+id)(apiObject,apiObject,apiObject)
                     instance=result?.default ?? result
@@ -170,7 +184,6 @@ export function createLegacyOptionsFactory(id: string, source: string): PluginOp
                     if(typeof instance.onLoad==='function') await instance.onLoad()
                     else if(typeof instance.start==='function') await instance.start()
                     else if(!instance.settings)throw new Error('No supported lifecycle in legacy plugin')
-                    api.cleanup(clean)
                 } catch(e) { clean();throw e }
             },
             async stop() {

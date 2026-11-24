@@ -179,6 +179,21 @@ internal object ManagerPluginWorker {
         }
     }
 
+    private fun legacyEnabled():Boolean=PluginStatesStore.active.isPluginEnabled("veyra.legacy.compat")
+    private fun requireLegacyEnabled(){
+        check(legacyEnabled()) {"Revenge-Kompatibilitätsmodus zuerst aktivieren."}
+    }
+    private val portAlternatives=mapOf(
+        "veyra.port.no-typing" to setOf("palmdevs.silent-typing"),
+        "veyra.port.char-counter" to setOf("thororen.character-counter"),
+        "veyra.port.clean-urls" to setOf("hakuxyz.clear-urls"),
+        "veyra.port.pastelize" to setOf("dxckie.pastelize"),
+    )
+    private fun conflictingPort(id:String):String? {
+        val matches=portAlternatives[id].orEmpty()+portAlternatives.filterValues{id in it}.keys
+        return matches.firstOrNull{PluginStatesStore.active.isPluginEnabled(it)}
+    }
+
     private fun snapshot(message: String = ""): JSONObject {
         val repos = JSONArray()
         val available = JSONArray()
@@ -220,7 +235,7 @@ internal object ManagerPluginWorker {
                 .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: "")
                 .put("repo", SourcesStore[id]?.repo ?: ""))
         }
-        return JSONObject().put("message", message).put("repos", repos)
+        return JSONObject().put("message", message).put("legacyEnabled",legacyEnabled()).put("repos", repos)
             .put("available", available).put("installed", installed)
     }
 
@@ -240,8 +255,23 @@ internal object ManagerPluginWorker {
             }
         }
         when (op) {
-            "legacy_preview" -> return LegacyRevengeImporter.preview(data.getString("url"))
+            "legacy_mode" -> {
+                val enabled=data.getBoolean("enabled")
+                if(!enabled){
+                    // Include older imports created before the compatibility dependency existed.
+                    for(id in pluginRegistry.factories.keys.filter{it.startsWith("veyra.legacy.")&&it!="veyra.legacy.compat"}){
+                        if(PluginStatesStore.active.isPluginEnabled(id))invoke("setEnabled",id,false,false)
+                    }
+                }
+                invoke("setEnabled","veyra.legacy.compat",enabled,enabled)
+                return snapshot(if(enabled)"Revenge-Modus aktiviert. Einzelne Ports auswählen." else "Revenge-Modus deaktiviert. Discord neu starten.")
+            }
+            "legacy_preview" -> {
+                requireLegacyEnabled()
+                return LegacyRevengeImporter.preview(data.getString("url"))
+            }
             "legacy_install" -> {
+                requireLegacyEnabled()
                 invoke("installLegacy",data.getString("token"))
                 return snapshot("Legacy-Plugin importiert. Unter Installiert gezielt aktivieren.")
             }
@@ -364,6 +394,10 @@ internal object ManagerPluginWorker {
                 val id = data.getString("id")
                 requireValidPluginId(id)
                 require(pluginRegistry.factories.containsKey(id)) { "Plugin nicht verfügbar." }
+                if(op=="enable"){
+                    if(id.startsWith("veyra.port.")||(id.startsWith("veyra.legacy.")&&id!="veyra.legacy.compat"))requireLegacyEnabled()
+                    conflictingPort(id)?.let{error("Ein gleichartiges Plugin ist bereits aktiv: "+it+". Erst deaktivieren.")}
+                }
                 if (op == "uninstall") invoke("uninstall", id)
                 else invoke("setEnabled", id, op == "enable", op == "enable")
                 return snapshot("Gespeichert. Discord neu starten, um Änderungen vollständig zu übernehmen.")

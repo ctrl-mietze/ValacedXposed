@@ -1,0 +1,19 @@
+{
+    "id": "veyra.port.char-counter",
+    "name": "Char Counter",
+    "description": "Zeigt die aktuelle Nachrichtenlänge und das Discord-Limit im Eingabebereich.",
+    "author": {
+        "name": "Veyra · Port of nexpid",
+        "links": [
+            {
+                "url": "https://github.com/nexpid/RevengePlugins/tree/main/src/plugins/char-counter",
+                "title": "Original legacy source"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {
+        "veyra.legacy.compat": {}
+    }
+}

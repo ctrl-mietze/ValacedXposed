@@ -1,0 +1,19 @@
+{
+    "id": "veyra.port.no-typing",
+    "name": "No Typing",
+    "description": "Unterdrückt ausschließlich deine lokale Tippanzeige.",
+    "author": {
+        "name": "Veyra · Port of redstonekasi",
+        "links": [
+            {
+                "url": "https://github.com/redstonekasi/vendetta-plugins/tree/50c6afcca1c2390db494292a2bf238bd0b34b352/plugins/no-typing",
+                "title": "Original legacy source"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {
+        "veyra.legacy.compat": {}
+    }
+}

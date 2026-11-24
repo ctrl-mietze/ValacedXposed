@@ -1,0 +1,19 @@
+{
+    "id": "veyra.port.clean-urls",
+    "name": "Clean URLs",
+    "description": "Entfernt bekannte Tracking-Parameter beim Kopieren und Senden von Links; signierte URLs bleiben unverändert.",
+    "author": {
+        "name": "Veyra · Port of nexpid",
+        "links": [
+            {
+                "url": "https://github.com/nexpid/RevengePlugins/tree/main/src/plugins/clean-urls",
+                "title": "Original legacy source"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {
+        "veyra.legacy.compat": {}
+    }
+}

@@ -120,6 +120,12 @@ val pluginMethods by tweak {
         val entry = pluginRegistry.loaded[pluginId]
 
         if (enabled) {
+            if (pluginId.startsWith("veyra.port.") ||
+                (pluginId.startsWith("veyra.legacy.") && pluginId != "veyra.legacy.compat")) {
+                check(PluginStatesStore.active.isPluginEnabled("veyra.legacy.compat")) {
+                    "Enable Revenge Compatibility first."
+                }
+            }
             // Required deps must be installed, satisfied and enabled first. JS must handle the resolution UX.
             val problems = factory?.dependencyProblemsToJSPayload(pluginRegistry.factories).orEmpty()
             if (problems.isNotEmpty()) throw PluginSystemError(
