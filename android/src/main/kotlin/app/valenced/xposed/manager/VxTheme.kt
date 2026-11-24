@@ -20,17 +20,17 @@ internal object VxThemes {
         raised: String, border: String, accent: String, secondary: String, text: String, muted: String) =
         VxTheme(id,name,description,c(bg),c(surface),c(raised),c(border),c(accent),c(secondary),c(text),c(muted))
     val all = listOf(
-        t("dark","Veyra Dark","Graphit · Lavendel · Mint","0D0E12","17191F","21232C","31333D","BEAEFF","71E6C9","F5F5FC","A0A3B1"),
-        t("amoled","Veyra AMOLED","Pures Schwarz · OLED-Kontrast","000000","101114","1A1B20","292A31","D0BFFF","8EECD8","F7F7FA","A6A6B2"),
-        t("glass","Veyra Glass","Tiefes Pflaume · sanfter Schimmer","100F1A","201E2D","2B293B","49435F","C8B7FF","A7DDF3","F7F3FF","B3ABC9"),
-        t("neon","Veyra Neon","Mitternacht · elektrische Akzente","080B13","141B29","1C2737","35435B","B5A1FF","48E5E2","F2F8FF","A4B4C7"),
-        t("frost","Veyra Frost","Kühles Blau · ruhige Flächen","0B111B","142030","1D2B3E","304359","9ACBFF","9DE9DD","EFF6FF","A7B8CF"),
-        t("core","Veyra Core","Carbon · dezentes Mint","101414","1A2222","252F2F","3B4B4A","A1E2CC","B9B2FF","EEF7F4","A7BBB6"),
+        t("dark","Veyra Dark","Obsidian · Lavendel · Mint","090A0F","151924","1B2030","2A3144","B79CFF","67E8B0","F4F6FF","A6B0C7"),
+        t("amoled","Veyra AMOLED","Pures Schwarz · OLED-Kontrast","000000","10121A","191C27","2B2E3B","CBB6FF","84E8C9","F6F5FF","A5AAC0"),
+        t("glass","Veyra Glass","Graphit · kühles Lavendel","10111A","191C28","222638","353A4E","C3B0FF","A7DDF3","F5F4FF","B0B6CB"),
+        t("neon","Veyra Neon","Carbon · Cyan · Lavendel","090D14","141C28","1C2938","344657","70E3DD","9BB8FF","F1F8FF","A6BCCB"),
+        t("frost","Veyra Frost","Kühles Blau · ruhige Flächen","0B111B","142030","1D2C40","30465D","A4CEFF","9DE9DD","EFF6FF","A7B8CF"),
+        t("core","Veyra Core","Carbon · dezentes Mint","0D1314","172020","202D2D","354B49","A1E2CC","B9B2FF","EEF7F4","A7BBB6"),
     )
     fun get(id: String?) = all.firstOrNull { it.id == id } ?: all.first()
-    val accents = listOf("Lavendel" to c("BEAEFF"),"Mint" to c("71E6C9"),"Eisblau" to c("9ACBFF"),
+    val accents = listOf("Lavendel" to c("B79CFF"),"Mint" to c("71E6C9"),"Eisblau" to c("9ACBFF"),
         "Rosé" to c("F4ACD5"),"Amber" to c("FFD18A"),"Silber" to c("D8DCE9"))
-    fun blend(a: Int,b: Int,f: Float): Int = Color.rgb(
+    fun onColor(color:Int):Int {\n        fun luminance(value:Int):Double {\n            fun linear(c:Int):Double {val v=c/255.0;return if(v<=.04045)v/12.92 else Math.pow((v+.055)/1.055,2.4)}\n            return .2126*linear(Color.red(value))+.7152*linear(Color.green(value))+.0722*linear(Color.blue(value))\n        }\n        val l=luminance(color)\n        val dark=c("10121A")\n        return if((l+.05)/(luminance(dark)+.05)>=1.05/(l+.05)) dark else Color.WHITE\n    }\n    fun blend(a: Int,b: Int,f: Float): Int = Color.rgb(
         (Color.red(a)*(1-f)+Color.red(b)*f).toInt(),
         (Color.green(a)*(1-f)+Color.green(b)*f).toInt(),
         (Color.blue(a)*(1-f)+Color.blue(b)*f).toInt())

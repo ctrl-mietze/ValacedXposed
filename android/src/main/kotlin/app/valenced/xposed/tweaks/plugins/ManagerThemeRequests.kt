@@ -8,6 +8,7 @@ import app.valenced.xposed.PluginHttps
 import app.valenced.plugins.repos.sha256Hex
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
 import app.valenced.xposed.tweaks.bridge.ValencedBridgeRegistry
 import android.util.Log
 import org.json.JSONObject
@@ -44,9 +45,11 @@ internal object ManagerThemeRequests {
         val request=Request(UUID.randomUUID().toString(),operation,data.toString(),CompletableDeferred())
         synchronized(this) { check(pending==null){"Theme-Aktion läuft bereits."};pending=request }
         try {
-            check(ready && ValencedBridgeRegistry.isReady) {
-                "Discord-Theme-Bridge nicht gestartet. Discord öffnen und synchronisieren."
-            }
+            val available=withTimeoutOrNull(2500L) {
+                while(!ready||!ValencedBridgeRegistry.isReady)delay(100L)
+                true
+            }==true
+            check(available) {"Discord-Theme-Bridge nicht gestartet. Discord öffnen und synchronisieren."}
             Log.d("ValancedXTheme","Dispatch "+operation)
             ValencedBridgeRegistry.wakeManagerThemes()
             val raw=withTimeoutOrNull(if(operation=="theme_snapshot")6000L else 15000L){request.response.await()}

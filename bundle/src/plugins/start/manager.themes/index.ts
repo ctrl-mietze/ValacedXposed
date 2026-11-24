@@ -7,6 +7,7 @@ import { after } from '@valenced/patcher'
 import { createElement, cloneElement, isValidElement, useEffect, useRef } from 'react'
 import { Animated, AppState, Easing, View } from 'react-native'
 import manifest from './manifest.json'
+import { palettes, ownTheme, previewPalette, previewTokens } from './palettes'
 
 type ThemeData = { name: string; description: string; colors: any; background?: any }
 type FontData = {name:string; description:string; files:Record<string,string>}
@@ -22,28 +23,6 @@ let registeredStore:any
 let motionCleanup:(()=>void)|undefined
 let polling=false
 
-const palettes=[
-    ['midnight','Veyra Midnight','#0d0e12','#17191f','#21232c','#beaeff','#f5f5fc'],
-    ['lavender','Veyra Lavender','#15101d','#211b2d','#30263e','#c8b7ff','#f7f3ff'],
-    ['frost','Veyra Frost','#0b111b','#142030','#1d2b3e','#9acbff','#eff6ff'],
-    ['neon','Veyra Neon','#080b13','#141b29','#1c2737','#48e5e2','#f2f8ff'],
-    ['glass','Veyra Glass','#100f1a','#201e2d','#2b293b','#c8b7ff','#f7f3ff'],
-    ['amoled','Veyra AMOLED','#000000','#101114','#1a1b20','#d0bfff','#f7f7fa'],
-    ['bloom','Veyra Bloom','#0c0710','#25172d','#3a2444','#f4acd5','#faf0fb'],
-    ['eclipse','Veyra Eclipse','#05070e','#151b2d','#252d43','#a9b9ff','#eef2ff'],
-]
-function ownTheme(p:string[]):ThemeData{
-    const [,name,bg,side,card,accent,text]=p
-    const semantic:Record<string,string>={}
-    for(const k of ['BACKGROUND_PRIMARY','BACKGROUND_MOBILE_PRIMARY','BG_BASE_PRIMARY','BACKGROUND_BASE_LOWER','BACKGROUND_BASE_LOW'])semantic[k]=bg!
-    for(const k of ['BACKGROUND_SECONDARY','BACKGROUND_MOBILE_SECONDARY','BACKGROUND_TERTIARY','BACKGROUND_BASE_LOWEST','CHANNEL_BACKGROUND_DEFAULT','BG_BASE_SECONDARY','PANEL_BG'])semantic[k]=side!
-    for(const k of ['BACKGROUND_SURFACE_HIGH','BACKGROUND_SURFACE_HIGHEST','CARD_PRIMARY_BG','MOBILE_FLOATINGBAR_BACKGROUND','BACKGROUND_MODIFIER_SELECTED'])semantic[k]=card!
-    for(const k of ['BACKGROUND_BRAND','BACKGROUND_ACCENT','TEXT_LINK','TEXT_BRAND','ICON_BRAND'])semantic[k]=accent!
-    for(const k of ['TEXT_NORMAL','TEXT_STRONG','TEXT_DEFAULT','HEADER_PRIMARY','INTERACTIVE_ACTIVE'])semantic[k]=text!
-    return {name:name!,description:'Originale Veyra-Farbpalette für Discord',colors:{semantic:{dark:semantic,darker:semantic,midnight:semantic,light:semantic},raw:{
-        BRAND_500:accent,BRAND_560:accent,BRAND_360:accent,PRIMARY_600:bg,PRIMARY_630:side,PRIMARY_660:card,
-    }}}
-}
 function themeStore():any {
     return (pList.get('valenced.settings.themes')?.api as any)?.themesInternal?.store
 }
@@ -80,9 +59,10 @@ function parseLegacyTheme(data:any):ThemeData{
         const c=normalizedColor(v);if(valid(k)&&c)raw[k]=c
     }
     if(!Object.keys(dark).length&&!Object.keys(light).length&&!Object.keys(raw).length)throw new Error('Keine gültigen Farben.')
-    const aliases:Record<string,string[]>={BACKGROUND_PRIMARY:['BACKGROUND_BASE_LOW','BACKGROUND_BASE_LOWER','BG_BASE_PRIMARY'],
-        BACKGROUND_SECONDARY:['BACKGROUND_BASE_LOWEST','CHANNEL_BACKGROUND_DEFAULT','PANEL_BG'],
-        TEXT_NORMAL:['TEXT_DEFAULT','TEXT_STRONG'],BACKGROUND_ACCENT:['BACKGROUND_BRAND']}
+    const aliases:Record<string,string[]>={BACKGROUND_PRIMARY:['BACKGROUND_BASE_LOWER','BG_BASE_PRIMARY'],
+        BACKGROUND_SECONDARY:['BACKGROUND_BASE_LOW','BACKGROUND_BASE_LOWEST','CHANNEL_BACKGROUND_DEFAULT','PANEL_BG'],
+        BACKGROUND_FLOATING:['BACKGROUND_SURFACE_HIGHEST'],
+        TEXT_NORMAL:['TEXT_DEFAULT','TEXT_STRONG'],TEXT_MUTED:['TEXT_TERTIARY']}
     for(const map of [dark,light,midnight])for(const [old,keys] of Object.entries(aliases))
         if(map[old])for(const key of keys)map[key]??=map[old]!
     const background=data.background
@@ -111,22 +91,23 @@ function registerAll(store:any,force=false){
     store.registerGroup(ID,GROUP,{name:'Importiert',description:'Legacy-Themes und Fonts'})
     for(const p of palettes){
         const theme=ownTheme(p)
-        store.registerTheme(ID,OWN,p[0],{name:theme.name,description:theme.description,getColors:()=>theme.colors})
+        store.registerTheme(ID,OWN,p.id,{name:theme.name,description:theme.description,getColors:()=>theme.colors})
     }
     for(const [url,theme] of Object.entries(imports))store.registerTheme(ID,GROUP,url,{name:theme.name,description:theme.description,getColors:()=>theme.colors,background:theme.background})
     for(const [url,font] of Object.entries(fonts))store.registerFontPack(ID,GROUP,url,{name:font.name,description:font.description,families:fontFamilies(font.files)})
     store.registerFontPack(ID,OWN,'system',{name:'System UI',description:'Android-Systemschrift',families:Object.fromEntries(['ggsans-Normal','ggsans-Medium','ggsans-Semibold','ggsans-Bold','ggsans-ExtraBold'].map(k=>[k,'system-ui']))})
     store.registerEmojiPack(ID,OWN,'system',{name:'Android System Emoji',description:'Emoji-Schrift des Geräts',font:'system'})
 }
-const tokens=['BACKGROUND_BASE_LOW','CHANNEL_BACKGROUND_DEFAULT','BACKGROUND_SURFACE_HIGHEST','BACKGROUND_BRAND','TEXT_STRONG','TEXT_LINK']
+const tokens=previewTokens
 function previewOf(store:any,plugin:string,group:string,id:string,item:any){
+    const own=plugin===ID&&group===OWN?palettes.find(p=>p.id===id):undefined
+    const fallback=own?previewPalette(own):undefined
     try{
         const colors=store.previewColorsOf(plugin,group,id,'dark',tokens)
         const parsed=Array.isArray(colors)?colors.map(normalizedColor):[]
-        if(parsed.some(Boolean))return parsed
+        if(parsed.some(Boolean))return tokens.map((_,i)=>parsed[i]??fallback?.[i]??null)
     }catch{}
-    const theme=plugin===ID&&group===OWN?palettes.find(p=>p[0]===id):undefined
-    if(theme)return [theme[2],theme[3],theme[4],theme[5],theme[6],theme[5]]
+    if(fallback)return fallback
     if(plugin===ID&&imports[id]){
         const c=imports[id]!.colors.semantic.dark
         return tokens.map(k=>normalizedColor(c[k])??null)
@@ -152,12 +133,23 @@ function snapshot(store:any){
                         background:kind==='themes'&&typeof item.background?.path==='string'?item.background.path.slice(0,500):''})
                 }
     const bg=selected.background??{source:'theme'}
-    return {themeState:{ready:true,entries,background:bg,defaults:{themes:!selected.colors,fontPacks:!Object.keys(selected.fonts?.families??{}).length,iconPacks:!selected.icons,emojiPacks:!selected.emoji}}}
+    const active=selected.colors
+    const applied=active?.values?.semantic?.dark
+    const activeColors=applied?tokens.map(k=>normalizedColor(applied[k])??null):[]
+    return {themeState:{ready:true,entries,background:bg,
+        activeTheme:active?{plugin:active.plugin,group:active.group,id:active.theme,colors:activeColors}:null,
+        defaults:{themes:!selected.colors,fontPacks:!Object.keys(selected.fonts?.families??{}).length,iconPacks:!selected.icons,emojiPacks:!selected.emoji}}}
 }
 async function command(op:string,json:string){
     const store=themeStore()
     if(!store)return snapshot(null)
     await load();registerAll(store);patchMotion()
+    const selection=store.themesStore.getState().selected?.colors
+    if(selection?.plugin===ID&&selection.group===OWN&&palettes.some(p=>p.id===selection.theme)){
+        // Upstream registerTheme refreshes selected themes asynchronously.
+        // Explicit selection here also handles early startup token initialization.
+        await store.selectTheme(ID,OWN,selection.theme)
+    }
     const data=JSON.parse(json)
     if(!data||typeof data!=='object')throw new Error('Ungültige Theme-Daten.')
     if(op==='theme_import'){

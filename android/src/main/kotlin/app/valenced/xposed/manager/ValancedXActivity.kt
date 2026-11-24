@@ -47,10 +47,13 @@ class ValancedXActivity : Activity() {
     private val borderColor get() = currentTheme.border
     private val accentColor get() = currentTheme.accent
     private val mintColor get() = currentTheme.secondary
-    private val warmColor = Color.rgb(255, 203, 115)
-    private val errorColor = Color.rgb(255, 143, 157)
+    private val warmColor = Color.rgb(247, 198, 107)
+    private val errorColor = Color.rgb(255, 124, 145)
     private val whiteColor get() = currentTheme.text
     private val mutedColor get() = currentTheme.muted
+    private val onAccentColor get() = VxThemes.onColor(accentColor)
+    private val selectedSurface get() = VxThemes.blend(raisedColor,accentColor,.10f)
+    private val selectedStroke get() = VxThemes.blend(borderColor,accentColor,.35f)
 
     private fun readTheme() {
         val base = VxThemes.get(prefs.getString("ui_theme_id","dark"))
@@ -220,7 +223,7 @@ class ValancedXActivity : Activity() {
     private fun button(value: String, primary: Boolean = false, destructive: Boolean = false, action: () -> Unit) =
         label(
             value, 14f,
-            if (primary) backgroundColor else if (destructive) errorColor else whiteColor,
+            if (primary) onAccentColor else if (destructive) errorColor else whiteColor,
             true,
         ).apply {
             gravity = Gravity.CENTER
@@ -234,6 +237,12 @@ class ValancedXActivity : Activity() {
             setOnClickListener { action() }
         }
 
+    private fun applySwitchPalette(toggle: Switch) {
+        val states=arrayOf(intArrayOf(-android.R.attr.state_enabled),intArrayOf(android.R.attr.state_checked),intArrayOf())
+        toggle.thumbTintList=ColorStateList(states,intArrayOf(borderColor,accentColor,mutedColor))
+        toggle.trackTintList=ColorStateList(states,intArrayOf(surfaceColor,VxThemes.blend(raisedColor,accentColor,.36f),borderColor))
+    }
+
     private fun setting(parent: LinearLayout, name: String, description: String, key: String, fallback: Boolean) {
         val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val content = column()
@@ -244,7 +253,7 @@ class ValancedXActivity : Activity() {
         val toggle = Switch(this).apply {
             isChecked = enabled
             contentDescription = name
-            thumbTintList = ColorStateList.valueOf(if (enabled) accentColor else mutedColor)
+            applySwitchPalette(this)
             setOnCheckedChangeListener { _, checked ->
                 val editor = prefs.edit().putBoolean(key, checked)
                 if (key == "safe_mode" && !checked) {
@@ -384,7 +393,7 @@ class ValancedXActivity : Activity() {
             setting(this, "Recovery-Modus", "Verhindert das Hermes-Bundle; die frühe native Hook-Registrierung bleibt erhalten.", "safe_mode", false)
         }
         if (prefs.getBoolean("auto_recovery", false)) {
-            card(parent, tint = Color.rgb(45, 32, 40)) {
+            card(parent, tint = VxThemes.blend(surfaceColor,errorColor,.09f)) {
                 add(this, label("Automatischer Schutz aktiv", 16f, warmColor, true))
                 add(
                     this,
@@ -639,9 +648,9 @@ class ValancedXActivity : Activity() {
                 control.visual = visual
                 control.button.text = buttonText
                 control.button.isEnabled = enabled
-                control.button.alpha = if (enabled || active || ready) 1f else .55f
-                control.button.setTextColor(if (success) mintColor else backgroundColor)
-                control.button.background = if (success)
+                control.button.alpha = 1f
+                control.button.setTextColor(if (success) mintColor else if(enabled||active) onAccentColor else mutedColor)
+                control.button.background = if (success || (!enabled&&!active))
                     interactive(raisedColor, borderColor, 13) else interactive(accentColor, accentColor, 13)
                 control.progress.visibility = if (active) View.VISIBLE else View.INVISIBLE
             }
@@ -782,6 +791,9 @@ class ValancedXActivity : Activity() {
 
     private fun customPluginSource() {
         val input = EditText(this).apply {
+            setTextColor(whiteColor)
+            setHintTextColor(mutedColor)
+            backgroundTintList=ColorStateList.valueOf(accentColor)
             hint = "https://example.org/index.json"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
@@ -814,7 +826,7 @@ class ValancedXActivity : Activity() {
         row.addView(Switch(this).apply {
             isChecked = prefs.getBoolean(key,fallback)
             contentDescription = title
-            thumbTintList = ColorStateList.valueOf(if(isChecked) accentColor else mutedColor)
+            applySwitchPalette(this)
             setOnCheckedChangeListener { _, enabled ->
                 prefs.edit().putBoolean(key,enabled).apply()
                 render(preserveScroll=true)
@@ -1002,8 +1014,8 @@ class ValancedXActivity : Activity() {
             val cell=label(name,12f,if(i==selected)accentColor else mutedColor,i==selected).apply{
                 gravity=Gravity.CENTER;maxLines=1
                 setPadding(dp(2),dp(11),dp(2),dp(11))
-                background=interactive(if(i==selected)VxThemes.blend(raisedColor,accentColor,.13f) else surfaceColor,
-                    if(i==selected)VxThemes.blend(borderColor,accentColor,.25f) else surfaceColor,14)
+                background=interactive(if(i==selected)selectedSurface else surfaceColor,
+                    if(i==selected)selectedStroke else surfaceColor,14)
                 isSelected=i==selected;setOnClickListener{choose(i)}
             }
             nav.addView(cell,LinearLayout.LayoutParams(0,-2,1f).apply{setMargins(dp(2),0,dp(2),0)})
@@ -1064,7 +1076,7 @@ class ValancedXActivity : Activity() {
                 row.addView(title,LinearLayout.LayoutParams(0,-2,1f))
                 row.addView(Switch(this@ValancedXActivity).apply{
                     isChecked=enabled;contentDescription="Quelle aktivieren"
-                    thumbTintList=ColorStateList.valueOf(if(enabled)accentColor else mutedColor)
+                    applySwitchPalette(this)
                     isEnabled=pluginJob==null
                     setOnCheckedChangeListener{_,_->pluginAction("toggle_repo",JSONObject().put("url",url))}
                 })
@@ -1106,19 +1118,7 @@ class ValancedXActivity : Activity() {
         parent.addView(DiscordThemePreview(this,DiscordThemePreview.palette(values,currentTheme),animated),
             LinearLayout.LayoutParams(-1,dp(162)).apply{topMargin=dp(11)})
     }
-    private fun builtinPalette(id:String):JSONArray{
-        val p=when(id){
-            "midnight"->listOf("#0d0e12","#17191f","#21232c","#beaeff","#f5f5fc")
-            "lavender"->listOf("#15101d","#211b2d","#30263e","#c8b7ff","#f7f3ff")
-            "frost"->listOf("#0b111b","#142030","#1d2b3e","#9acbff","#eff6ff")
-            "neon"->listOf("#080b13","#141b29","#1c2737","#48e5e2","#f2f8ff")
-            "glass"->listOf("#100f1a","#201e2d","#2b293b","#c8b7ff","#f7f3ff")
-            "amoled"->listOf("#000000","#101114","#1a1b20","#d0bfff","#f7f7fa")
-            "bloom"->listOf("#0c0710","#25172d","#3a2444","#f4acd5","#faf0fb")
-            "eclipse"->listOf("#05070e","#151b2d","#252d43","#a9b9ff","#eef2ff")
-            else->listOf("#080b17","#141b29","#251f3b","#71e6c9","#f5f5fc")
-        };return JSONArray(p)
-    }
+    private fun builtinPalette(id:String):JSONArray=VxDiscordPalettes.preview(id)
     private fun backgroundScreen(parent:LinearLayout,ready:Boolean){
         eyebrow(parent,"HINTERGRUND STUDIO")
         val background=discordThemeState?.optJSONObject("background")?:JSONObject()
@@ -1306,7 +1306,7 @@ class ValancedXActivity : Activity() {
         }
     }
     private fun urlPrompt(title:String,hint:String,run:(String)->Unit){
-        val input=EditText(this).apply{this.hint=hint;setSingleLine(true);inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI}
+        val input=EditText(this).apply{setTextColor(whiteColor);setHintTextColor(mutedColor);backgroundTintList=ColorStateList.valueOf(accentColor);this.hint=hint;setSingleLine(true);inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI}
         AlertDialog.Builder(this).setTitle(title).setView(input).setNegativeButton("Abbrechen",null)
             .setPositiveButton("Weiter"){_,_->run(input.text.toString().trim())}.show()
     }
@@ -1505,15 +1505,15 @@ class ValancedXActivity : Activity() {
             val cell = column().apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(3), dp(5), dp(3), dp(5))
-                background = interactive(if (selected) VxThemes.blend(raisedColor,accentColor,.15f) else surfaceColor,
-                    if (selected) VxThemes.blend(borderColor,accentColor,.32f) else surfaceColor, 16)
+                background = interactive(if (selected) selectedSurface else surfaceColor,
+                    if (selected) selectedStroke else surfaceColor, 16)
                 isClickable = true
                 isFocusable = true
                 isSelected = selected
                 contentDescription = tabs[index]
                 addView(VxIcon(this@ValancedXActivity,symbols[index],if(selected) accentColor else mutedColor),
                     LinearLayout.LayoutParams(dp(24),dp(24)))
-                add(this, label(tabs[index], 10f, if (selected) whiteColor else mutedColor, selected).apply {
+                add(this, label(tabs[index], 10f, if (selected) accentColor else mutedColor, selected).apply {
                     maxLines=1
                     ellipsize=android.text.TextUtils.TruncateAt.END
                     gravity = Gravity.CENTER
