@@ -4,8 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import app.valenced.xposed.ETagFetchResult
-import app.valenced.xposed.getWithETag
-import app.valenced.xposed.httpClient
+import app.valenced.xposed.PluginHttps
 import app.valenced.plugins.repos.sha256Hex
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
@@ -45,7 +44,7 @@ internal object ManagerThemeAssets {
         return u.toString()
     }
     private suspend fun download(url:String,max:Int):ByteArray {
-        val data=httpClient.getWithETag(validUrl(url),null,15_000L) as? ETagFetchResult.Fetched
+        val data=PluginHttps.fetch(validUrl(url),null,15_000L,max.toLong()) as? ETagFetchResult.Fetched
             ?:error("Datei nicht verfügbar.")
         require(data.bytes.size in 1..max){"Dateigröße nicht unterstützt."}
         return data.bytes

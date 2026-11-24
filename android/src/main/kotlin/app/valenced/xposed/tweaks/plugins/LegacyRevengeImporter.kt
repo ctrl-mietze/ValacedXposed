@@ -6,8 +6,7 @@ import app.valenced.plugins.external.stagePluginZip
 import app.valenced.plugins.repos.sha256Hex
 import app.valenced.plugins.repos.repoInstallMutex
 import app.valenced.xposed.ETagFetchResult
-import app.valenced.xposed.getWithETag
-import app.valenced.xposed.httpClient
+import app.valenced.xposed.PluginHttps
 import app.valenced.xposed.tweaks.plugins.external.InstallResult
 import app.valenced.xposed.tweaks.plugins.external.readExternalPluginDir
 import java.io.ByteArrayOutputStream
@@ -34,7 +33,7 @@ internal object LegacyRevengeImporter {
     }
 
     private suspend fun fetch(url: String, cap: Int): ByteArray {
-        val result = httpClient.getWithETag(url, null, 15_000L) as? ETagFetchResult.Fetched
+        val result = PluginHttps.fetch(url, null, 15_000L, cap.toLong()) as? ETagFetchResult.Fetched
             ?: error("Keine Daten empfangen.")
         require(result.bytes.size in 1..cap) { "Datei ist leer oder zu groß." }
         return result.bytes

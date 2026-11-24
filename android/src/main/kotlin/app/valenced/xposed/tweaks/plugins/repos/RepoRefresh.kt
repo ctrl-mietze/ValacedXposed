@@ -6,8 +6,7 @@ import app.valenced.plugins.repos.RepoIndex
 import app.valenced.plugins.repos.RepoStore
 import app.valenced.plugins.repos.parseRepoIndex
 import app.valenced.xposed.ETagFetchResult
-import app.valenced.xposed.getWithETag
-import app.valenced.xposed.httpClient
+import app.valenced.xposed.PluginHttps
 
 private const val REFRESH_TIMEOUT = 10_000L
 
@@ -23,10 +22,10 @@ internal suspend fun refreshRepo(url: String): RepoIndex {
         "Unknown repository: '$url'"
     )
 
-    val result = httpClient.getWithETag(
+    val result = PluginHttps.fetch(
         url = url.trimEnd('/'),
         etag = RepoStore.cachedETag(url),
-        timeoutMillis = REFRESH_TIMEOUT,
+        timeoutMillis = REFRESH_TIMEOUT, maxBytes = 2_000_000L,
     )
 
     return when (result) {

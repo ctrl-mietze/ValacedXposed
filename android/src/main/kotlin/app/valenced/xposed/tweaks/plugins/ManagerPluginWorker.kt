@@ -10,8 +10,7 @@ import app.valenced.plugins.repos.RepoStore
 import app.valenced.plugins.repos.SourcesStore
 import app.valenced.plugins.repos.UserRepo
 import app.valenced.xposed.BuildConfig
-import app.valenced.xposed.httpClient
-import app.valenced.xposed.getWithETag
+import app.valenced.xposed.PluginHttps
 import app.valenced.xposed.ETagFetchResult
 import app.valenced.plugins.repos.parseRepoIndex
 import app.valenced.plugins.repos.sha256Hex
@@ -192,7 +191,7 @@ internal object ManagerPluginWorker {
             "theme_snapshot", "theme_import", "theme_apply", "theme_reset", "theme_remove", "theme_font_import", "theme_background" -> {
                 if(op=="theme_import"){
                     val url=validateUrl(data.getString("url"))
-                    val fetched=httpClient.getWithETag(url,null,15_000L) as? ETagFetchResult.Fetched
+                    val fetched=PluginHttps.fetch(url,null,15_000L,250_000L) as? ETagFetchResult.Fetched
                         ?: error("Keine Theme-Daten empfangen.")
                     require(fetched.bytes.size in 1..250_000) {"Theme-JSON ist zu groß."}
                     data.put("url",url).put("theme",JSONObject(fetched.bytes.decodeToString()))
@@ -228,7 +227,7 @@ internal object ManagerPluginWorker {
             }
             "preview_repo" -> {
                 val url=validateUrl(data.getString("url"))
-                val fetched=httpClient.getWithETag(url,null,10_000L) as? ETagFetchResult.Fetched
+                val fetched=PluginHttps.fetch(url,null,15_000L,2_000_000L) as? ETagFetchResult.Fetched
                     ?: error("Keine Indexdaten empfangen.")
                 require(fetched.bytes.size<=2_000_000) { "Repository-Index ist zu groß." }
                 val index=parseRepoIndex(fetched.bytes.decodeToString(),url,RepoStore.log)

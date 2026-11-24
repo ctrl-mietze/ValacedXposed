@@ -9,16 +9,11 @@ import app.valenced.plugins.repos.DownloadedArtifact
 import app.valenced.plugins.repos.RepoInstallAction
 import app.valenced.plugins.repos.installBegin
 import app.valenced.plugins.repos.installSubmit
-import app.valenced.xposed.httpClient
-import app.valenced.xposed.refusedHttpsDowngradeTarget
+import app.valenced.xposed.PluginHttps
+import app.valenced.xposed.ETagFetchResult
 import app.valenced.xposed.tweaks.plugins.*
 import app.valenced.xposed.tweaks.plugins.external.parseExternalPluginDir
 import app.valenced.xposed.tweaks.plugins.external.readParsedPlugin
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.plugins.*
-import io.ktor.client.request.*
-import io.ktor.http.*
 
 private const val DOWNLOAD_TIMEOUT = 60_000L
 
@@ -62,7 +57,7 @@ internal suspend fun executeInstallPlan(
     val downloads = requests.mapIndexed { i, request ->
         val emit = throttledProgress(request.action, i + 1, requests.size, onProgress)
         emit(0)
-        val bytes = download(httpClient, request, emit)
+        val bytes = download(request, emit)
         emit(request.size)
         DownloadedArtifact(request.action, bytes)
     }
@@ -108,29 +103,18 @@ private fun throttledProgress(
 
 /** Downloads one artifact. Core verifies its size and digest before anything reaches `dist/`. */
 private suspend fun download(
-    client: HttpClient,
     request: ArtifactRequest,
     onReceived: (Long) -> Unit,
 ): ByteArray {
-    val response = client.get(request.url) {
-        timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT }
-        onDownload { received, _ -> onReceived(received) }
+    return try {
+        val result = PluginHttps.fetch(request.url, timeoutMillis=DOWNLOAD_TIMEOUT,
+            maxBytes=request.size, onReceived=onReceived) as? ETagFetchResult.Fetched
+            ?: error("Keine Plugin-Datei empfangen.")
+        result.bytes
+    } catch(e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch(e: Exception) {
+        throw PluginSystemError(PluginErrorCodes.INSTALL_FAILED,
+            "Download "+request.action.id+"@"+request.action.version+": "+(e.message ?: e.javaClass.simpleName), e)
     }
-
-    response.refusedHttpsDowngradeTarget()?.let {
-        throw PluginSystemError(
-            PluginErrorCodes.INSTALL_FAILED,
-            "Failed to download ${request.action.id}@${request.action.version}: " +
-                "${request.url} redirects to insecure $it. The host should enforce HTTPS.",
-        )
-    }
-
-    if (response.status != HttpStatusCode.OK) {
-        throw PluginSystemError(
-            PluginErrorCodes.INSTALL_FAILED,
-            "Failed to download ${request.action.id}@${request.action.version}: ${response.status}",
-        )
-    }
-
-    return response.body()
 }
