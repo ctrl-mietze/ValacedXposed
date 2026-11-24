@@ -329,11 +329,53 @@ export const motionPresets: MotionPreset[] = [
       "selected": "#523338"
     },
     "dim": 0.38
+  },
+  {
+    "id": "ruby-violet",
+    "name": "Ruby Violet",
+    "description": "Rubinrot und tiefes Lila · zwei schwebende Nebelschichten",
+    "base": "#0a0610",
+    "glowA": "#b3123f",
+    "glowB": "#6c2bd9",
+    "accent": "#d98cff",
+    "duration": 9000,
+    "motion": "orbit",
+    "dim": 0.34,
+    "palette": {
+      "id": "motion-ruby-violet",
+      "name": "Veyra Ruby Violet · Colors",
+      "chat": "#0a0610",
+      "sidebar": "#17131f",
+      "header": "#1e1828",
+      "input": "#14101b",
+      "elevated": "#211a2c",
+      "accent": "#d98cff",
+      "text": "#f5f2ff",
+      "muted": "#b4abc9",
+      "secondary": "#d9d2ea",
+      "border": "#3a2e4a",
+      "selected": "#40224f"
+    }
   }
 ]
 export const motionById = new Map(motionPresets.map(p=>[p.id,p]))
 export function motionIdFromUri(uri:unknown):string|undefined{
     if(typeof uri!=='string'||!/^file:\/\//.test(uri))return undefined
-    const m=uri.match(/\/valenced\/manager-theme-assets\/veyra-motion-([a-z]+)(?:-v2)?\.png$/)
+    const m=uri.match(/\/valenced\/manager-theme-assets\/veyra-motion-([a-z]+(?:-[a-z]+)*?)(?:-v[23])?\.png$/)
     return m?.[1]&&motionById.has(m[1])?m[1]:undefined
+}
+
+/** Version 3 provides a transparent second light texture next to its base.
+ * Existing v1/v2 selections remain usable without requiring migration. */
+export function ambientSource(uri:string):string{
+    return motionIdFromUri(uri)&&uri.endsWith('-v3.png')
+        ? uri.slice(0,-4)+'-ambient.png'
+        : uri
+}
+export function ambientDuration(preset:MotionPreset):number{
+    return preset.id==='ruby-violet'?12400:Math.max(10000,Math.round(preset.duration*1.37))
+}
+export function ambientOpacity(base:unknown,progress:number):number{
+    const weight=typeof base==='number'&&Number.isFinite(base)?Math.max(0,Math.min(1,base)):1
+    return weight*(.24+.20*Math.max(0,Math.min(1,progress)))
 }

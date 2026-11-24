@@ -32,6 +32,12 @@ internal class DiscordThemePreview(context:Context, private val colors:IntArray,
             canvas.clipPath(clip)
             val phase=(android.os.SystemClock.uptimeMillis()%(motion.duration*2)).toDouble()/(motion.duration*2)
             VxMotionRenderer.draw(canvas,320f,h,motion,phase)
+            val secondDuration=VxMotionPresets.ambientDuration(motion)
+            val secondPhase=(android.os.SystemClock.uptimeMillis()%secondDuration).toDouble()/secondDuration
+            val alpha=(255*(.24+.20*(1-kotlin.math.cos(secondPhase*2*Math.PI))*.5)).toInt()
+            canvas.saveLayerAlpha(0f,0f,320f,h,alpha)
+            VxMotionRenderer.drawAmbient(canvas,320f,h,motion,secondPhase)
+            canvas.restore()
             canvas.restore()
         }else if(animated){
             val phase=(android.os.SystemClock.uptimeMillis()%10000L)/10000f

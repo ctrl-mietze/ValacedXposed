@@ -106,20 +106,26 @@ internal object ManagerThemeAssets {
             .put("description",doc.optString("description").take(200)).put("files",families)
     }
 
-    /** A bounded, local gradient asset. Versioned filenames preserve previously
-     * selected backgrounds; the JS renderer recognizes both generations. */
+    /** Version 3 keeps two independently animated local textures. */
     fun motionPath(context:Context,style:String):String {
         val preset=VxMotionPresets.get(style)?:error("Unbekanntes Motion-Theme.")
-        val file=File(directory(context),"veyra-motion-"+style+"-v2.png")
-        if(!file.isFile||file.length()==0L){
+        val dir=directory(context)
+        val file=File(dir,"veyra-motion-"+style+"-v3.png")
+        val ambient=File(dir,"veyra-motion-"+style+"-v3-ambient.png")
+        fun generate(target:File,layer:Boolean){
+            if(target.isFile&&target.length()>0L)return
             val bitmap=Bitmap.createBitmap(360,720,Bitmap.Config.ARGB_8888)
-            val temp=File(file.parentFile,file.name+".tmp")
+            val temp=File(target.parentFile,target.name+".tmp")
             try{
-                VxMotionRenderer.draw(android.graphics.Canvas(bitmap),360f,720f,preset,.22)
+                val canvas=android.graphics.Canvas(bitmap)
+                if(layer)VxMotionRenderer.drawAmbient(canvas,360f,720f,preset)
+                else VxMotionRenderer.draw(canvas,360f,720f,preset,.22)
                 temp.outputStream().use{check(bitmap.compress(Bitmap.CompressFormat.PNG,100,it)){"Hintergrund konnte nicht gespeichert werden."}}
-                check(temp.renameTo(file)){"Hintergrund konnte nicht übernommen werden."}
+                check(temp.renameTo(target)){"Hintergrund konnte nicht übernommen werden."}
             }finally{bitmap.recycle();temp.delete()}
         }
+        generate(file,false)
+        generate(ambient,true)
         return file.absolutePath
     }
 }

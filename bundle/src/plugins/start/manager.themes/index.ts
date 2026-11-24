@@ -4,11 +4,11 @@ import { pList, registerInternalPlugin } from '@valenced/plugins/_'
 import { getModules } from '@valenced/modules/finders'
 import { withProps } from '@valenced/modules/finders/filters'
 import { after } from '@valenced/patcher'
-import { Children, createElement, cloneElement, isValidElement, useEffect, useRef } from 'react'
+import { Children, Fragment, createElement, cloneElement, isValidElement, useEffect, useRef } from 'react'
 import { Animated, AppState, Easing, AccessibilityInfo, StyleSheet } from 'react-native'
 import manifest from './manifest.json'
 import { palettes, ownTheme, previewPalette, previewTokens } from './palettes'
-import { motionPresets, motionById, motionIdFromUri } from './motion-presets'
+import { motionPresets, motionById, motionIdFromUri, ambientSource, ambientDuration, ambientOpacity } from './motion-presets'
 const allPalettes=[...palettes,...motionPresets.map(p=>p.palette)]
 const renderedMotion=new Set<string>()
 
@@ -195,27 +195,33 @@ async function command(op:string,json:string){
     return snapshot(store)
 }
 
-/** Animates the actual background image in place. No tint over chat media,
- * no extra opaque overlay, and no hook-count change to Discord components. */
+/** Two independently animated image layers inside Discord's clipped
+ * background container. The chat, messages, icons and media are untouched. */
 function MotionImage({id,imageProps}:{id:string,imageProps:any}){
     const preset=motionById.get(id)!
     const phase=useRef(new Animated.Value(0)).current
+    const ambient=useRef(new Animated.Value(0)).current
     useEffect(()=>{
         let alive=true
         let reduced=false
         let active=AppState.currentState??'active'
         let animation:ReturnType<typeof Animated.loop>|undefined
+        let lightAnimation:ReturnType<typeof Animated.loop>|undefined
         const update=()=>{
-            animation?.stop()
+            animation?.stop();lightAnimation?.stop()
             if(!alive)return
-            if(reduced){phase.setValue(0);return}
+            if(reduced){phase.setValue(0);ambient.setValue(0);return}
             if(active!=='active')return
-            phase.setValue(0)
+            phase.setValue(0);ambient.setValue(0)
             animation=Animated.loop(Animated.timing(phase,{
                 toValue:1,duration:preset.duration*2,easing:Easing.linear,
                 useNativeDriver:true,isInteraction:false
             }))
-            animation.start()
+            lightAnimation=Animated.loop(Animated.timing(ambient,{
+                toValue:1,duration:ambientDuration(preset),easing:Easing.linear,
+                useNativeDriver:true,isInteraction:false
+            }))
+            animation.start();lightAnimation.start()
         }
         const subscription=AppState.addEventListener('change',state=>{active=state;update()})
         const accessibility=AccessibilityInfo?.addEventListener?.('reduceMotionChanged',value=>{reduced=value;update()})
@@ -225,10 +231,10 @@ function MotionImage({id,imageProps}:{id:string,imageProps:any}){
         }).catch(()=>{if(alive)update()})
         if(!renderedMotion.has(id)){
             renderedMotion.add(id)
-            nativeLoggingHook('[ValancedX Motion] Rendered '+id,1)
+            nativeLoggingHook('[ValancedX Motion] Dual layers rendered '+id,1)
         }
-        return()=>{alive=false;animation?.stop();subscription.remove();accessibility?.remove()}
-    },[phase,id,preset.duration])
+        return()=>{alive=false;animation?.stop();lightAnimation?.stop();subscription.remove();accessibility?.remove()}
+    },[phase,ambient,id,preset.duration])
     const flat=StyleSheet.flatten(imageProps.style)??{}
     const width=typeof flat.width==='number'?flat.width:360
     const height=typeof flat.height==='number'?flat.height:720
@@ -239,14 +245,35 @@ function MotionImage({id,imageProps}:{id:string,imageProps:any}){
     const y=preset.motion==='orbit'?[-.055,0,.055,0,-.055]:
         preset.motion==='drift'?[0,-.04,0,.04,0]:[0,0,0,0,0]
     const zoom=preset.motion==='pulse'?[1.04,1.13,1.23,1.13,1.04]:[1.27,1.29,1.30,1.29,1.27]
-    return createElement(Animated.Image,{
+    const base=createElement(Animated.Image,{
         ...imageProps,
+        key:'base',
         style:[imageProps.style,{transform:[
             {translateX:phase.interpolate({inputRange:frames,outputRange:x.map(v=>v*width)})},
             {translateY:phase.interpolate({inputRange:frames,outputRange:y.map(v=>v*height)})},
             {scale:phase.interpolate({inputRange:frames,outputRange:zoom})},
         ]}]
     })
+    const originalUri=imageProps.source?.uri
+    const lightUri=typeof originalUri==='string'?ambientSource(originalUri):originalUri
+    const legacy=lightUri===originalUri
+    // Older backgrounds use the same gradient at reduced opacity until
+    // reapplied. New backgrounds have a genuinely transparent light texture.
+    const light=createElement(Animated.Image,{
+        key:'ambient',source:{uri:lightUri},resizeMode:imageProps.resizeMode??'cover',
+        blurRadius:Math.max(legacy?10:0,Number(imageProps.blurRadius)||0),
+        pointerEvents:'none',accessible:false,
+        style:[imageProps.style,{
+            opacity:ambient.interpolate({inputRange:frames,
+                outputRange:[0,.65,1,.65,0].map(v=>ambientOpacity(flat.opacity,v)*(legacy ? .65 : 1))}),
+            transform:[
+                {translateX:ambient.interpolate({inputRange:frames,outputRange:[.04,-.13,-.04,.13,.04].map(v=>v*width)})},
+                {translateY:ambient.interpolate({inputRange:frames,outputRange:[-.08,-.015,.08,.015,-.08].map(v=>v*height)})},
+                {scale:ambient.interpolate({inputRange:frames,outputRange:[1.30,1.42,1.52,1.42,1.30]})},
+            ],
+        }]
+    })
+    return createElement(Fragment,null,base,light)
 }
 function patchMotion(){
     if(motionCleanup)return

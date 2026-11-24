@@ -63,4 +63,29 @@ internal object VxMotionRenderer {
         canvas.restore()
         paint.shader=null
     }
+    /** Transparent, feathered light clouds. Independent from the opaque base
+     * image, with no sharp edges or foreground color filtering. */
+    fun drawAmbient(canvas:Canvas,width:Float,height:Float,preset:VxMotionPresets.Preset,phase:Double=0.0){
+        if(width<=0||height<=0)return
+        val t=phase*2*Math.PI
+        val dx=(sin(t)*.15).toFloat()
+        val dy=(cos(t)*.10).toFloat()
+        val pulse=(.91+.09*sin(t)).toFloat()
+        val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
+        canvas.save()
+        canvas.scale(width,height)
+        fun cloud(x:Float,y:Float,rx:Float,ry:Float,color:Int,alpha:Int){
+            canvas.save();canvas.translate(x,y);canvas.scale(rx,ry)
+            fun withAlpha(a:Int)=Color.argb(a,Color.red(color),Color.green(color),Color.blue(color))
+            paint.shader=RadialGradient(0f,0f,1f,intArrayOf(withAlpha(alpha),withAlpha(alpha/2),withAlpha(alpha/8),withAlpha(0)),
+                floatArrayOf(0f,.28f,.67f,1f),Shader.TileMode.CLAMP)
+            canvas.drawRect(-1f,-1f,1f,1f,paint)
+            canvas.restore()
+        }
+        cloud(.25f+dx,.72f+dy,.82f*pulse,.58f*pulse,preset.firstColor(),225)
+        cloud(.77f-dx,.29f-dy,.73f/pulse,.60f/pulse,preset.secondColor(),220)
+        cloud(.48f-dx*.5f,.52f+dy*.6f,.55f,.38f,Color.parseColor(preset.accent),72)
+        canvas.restore()
+    }
+
 }
