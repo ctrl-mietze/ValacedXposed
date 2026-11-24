@@ -4,6 +4,10 @@ import {
 } from '@valenced/discord/actions'
 import { Design } from '@valenced/discord/design'
 import { RootNavigationRef } from '@valenced/discord/modules/main_tabs_v2'
+import { Component as ReactComponent } from 'react'
+import { Modal, View, Text as NativeText, Pressable } from 'react-native'
+import type { ReactNode } from 'react'
+import type { PluginApi } from '@valenced/plugins/types'
 import {
     deleteStorageForPlugin,
     getPluginDependents,
@@ -86,16 +90,68 @@ function getCascadeDisabledDependents(plugin: AnyPlugin) {
     return [...disabled]
 }
 
+const SettingsOverlayKey = 'vexcord-plugin-settings-fallback'
+
+class SettingsErrorBoundary extends ReactComponent<{ children: ReactNode }, { error?: string }> {
+    state: { error?: string } = {}
+    static getDerivedStateFromError(error: unknown) { return { error: String(error) } }
+    render() {
+        if (this.state.error) return (
+            <View style={{padding: 16}}>
+                <NativeText selectable style={{color: '#f1eaff'}}>Plugin settings could not render: {this.state.error}</NativeText>
+            </View>
+        )
+        return this.props.children
+    }
+}
+function PluginSettingsOverlay({plugin}: {plugin: AnyPlugin}) {
+    const Screen = plugin.SettingsComponent
+    const close = () => AlertActionCreators.dismissAlert(SettingsOverlayKey)
+    return (
+        <Modal visible animationType="slide" onRequestClose={close}>
+            <View style={{flex:1,backgroundColor:'#10111a'}}>
+                <View style={{padding:16,paddingTop:28,flexDirection:'row',alignItems:'center'}}>
+                    <NativeText style={{color:'#f1eaff',fontWeight:'700',fontSize:19,flex:1}}>{plugin.manifest.name}</NativeText>
+                    <Pressable accessibilityRole="button" onPress={close} style={{padding:12}}>
+                        <NativeText style={{color:'#c9b3ff',fontWeight:'600'}}>Close</NativeText>
+                    </Pressable>
+                </View>
+                <View style={{flex:1}}>
+                    <SettingsErrorBoundary>
+                        {Screen && plugin.api ? <Screen api={plugin.api as PluginApi<any>}/> :
+                            <NativeText style={{color:'#f1eaff',padding:16}}>Start the plugin to open its settings.</NativeText>}
+                    </SettingsErrorBoundary>
+                </View>
+            </View>
+        </Modal>
+    )
+}
+
 export function openPluginSettings(plugin: AnyPlugin) {
     if (!plugin.SettingsComponent || !isPluginStarted(plugin)) return
-
-    const navigation = RootNavigationRef.getRootNavigationRef()
-    if (navigation.isReady()) navigation.navigate(plugin.manifest.id)
-    else
-        navigation.addListener('ready', function self() {
-            navigation.navigate(plugin.manifest.id)
-            navigation.removeListener('ready', self)
-        })
+    // Wait for the options sheet to close and for a lazily registered route.
+    void import('../plugins').then(({ensurePluginSettingsRoute}) => {
+        ensurePluginSettingsRoute(plugin)
+    }).catch(() => {}).finally(() => {
+        setTimeout(() => {
+            if (!isPluginStarted(plugin)) return
+            try {
+                const navigation = RootNavigationRef.getRootNavigationRef()
+                // navigate() silently ignores routes registered in a different
+                // navigator; use the explicit overlay if the root cannot open it.
+                if (navigation.isReady() && navigation.getRootState()?.routeNames?.includes(plugin.manifest.id)) {
+                    navigation.navigate(plugin.manifest.id)
+                    return
+                }
+            } catch {}
+            try {
+                AlertActionCreators.dismissAlert(SettingsOverlayKey)
+                AlertActionCreators.openAlert(SettingsOverlayKey, <PluginSettingsOverlay plugin={plugin}/>)
+            } catch (e) {
+                showErrorToast(String(e), 'PLUGIN_SETTINGS_OPEN_ERROR')
+            }
+        }, 250)
+    })
 }
 
 export function showPluginHasDependenciesAlert(

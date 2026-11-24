@@ -65,7 +65,7 @@ val additionalBridgeMethods by tweak {
         registerNativeMethod("vexcord.audio.configure") { args ->
             val enabled=args.getOrNull(0) as? Boolean ?: false
             val preference=args.getOrNull(1) as? String ?: "auto"
-            StereoCallController.configure(enabled,preference)
+            StereoCallController.configure(enabled,preference,args.getOrNull(2) as? Boolean ?: false)
         }
         registerNativeMethod("vexcord.bitchord.session") {
             if(!PluginStatesStore.active.isPluginEnabled("vexcord.bitchord-presence"))

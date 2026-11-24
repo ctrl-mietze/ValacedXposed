@@ -79,7 +79,14 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
     override fun handleLoadPackage(param: XC_LoadPackage.LoadPackageParam) {
         // ProcessPhoenix's :phoenix process must never receive the same tweaks.
-        if (param.packageName != ValencedConstants.TARGET_PACKAGE) return
+        if (param.packageName != ValencedConstants.TARGET_PACKAGE) {
+            if (param.packageName in app.valenced.xposed.tweaks.media.MediaRouteLease.packages &&
+                (param.processName == param.packageName || param.processName.startsWith(param.packageName + ":"))) {
+                runCatching { app.valenced.xposed.tweaks.media.MusicMediaHooks.install(param.packageName) }
+                    .onFailure { log("Music hook bootstrap failed", it) }
+            }
+            return
+        }
         if (param.processName != param.packageName) return
         if (!processClaimed.compareAndSet(false, true)) return
 

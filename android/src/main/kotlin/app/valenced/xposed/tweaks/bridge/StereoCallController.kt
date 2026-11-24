@@ -1,6 +1,7 @@
 package app.valenced.xposed.tweaks.bridge
 
 import android.content.Context
+import app.valenced.xposed.BuildConfig
 import android.media.AudioDeviceInfo
 import android.media.AudioDeviceCallback
 import android.os.Handler
@@ -37,6 +38,8 @@ internal object StereoCallController {
     private var installed=0
     private var modeHook=false
     private var configured=false
+    private var mediaRouting=false
+    private var nativeTrial=false
     private var preference=StereoRoutePolicy.Preference.AUTO
     private var requestedCall=false
     private var suppressedMode=false
@@ -137,7 +140,10 @@ internal object StereoCallController {
             val output=(track["javaOutputVerified"] as? Int)?:0
             val input=(track["javaInputVerified"] as? Int)?:0
             if(output>0&&input>0)routeNote="a2dp-track-verified"
-            else{
+            else if(nativeTrial && a.mode==AudioManager.MODE_NORMAL &&
+                a.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any{it.type==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP}){
+                routeNote="a2dp-native-trial-unverified"
+            }else{
                 restore("split-not-verified")
                 // Prefer a real LE communication device as the fallback,
                 // rather than asserting that the split mode is working.
@@ -152,24 +158,37 @@ internal object StereoCallController {
             restore("le-not-selected")
         }
     }
-    fun configure(enabled:Boolean,mode:String):Map<String,Any> = synchronized(lock){
-        val p=when(mode){"a2dp"->StereoRoutePolicy.Preference.A2DP;"le"->StereoRoutePolicy.Preference.LE;else->StereoRoutePolicy.Preference.AUTO}
+    fun configure(enabled:Boolean,mode:String,media:Boolean=false):Map<String,Any> = synchronized(lock){
+        val trial=mode=="a2dp_native"
+        if(trial!=nativeTrial)restore("profile-changed")
+        nativeTrial=trial
+        mediaRouting=media
+        val p=when(mode){"a2dp","a2dp_native"->StereoRoutePolicy.Preference.A2DP;"le"->StereoRoutePolicy.Preference.LE;else->StereoRoutePolicy.Preference.AUTO}
         if(!enabled||p!=preference)restore("standard-routing")
         configured=enabled;preference=p
         app?.getSharedPreferences("vexcord_stereo_native",Context.MODE_PRIVATE)?.edit()
-            ?.putBoolean("enabled",enabled)?.putString("mode",p.name)?.apply()
+            ?.putBoolean("enabled",enabled)?.putString("mode",p.name)?.putBoolean("mediaRouting",media)?.putBoolean("nativeTrial",trial)?.apply()
         status()
     }
     fun status():Map<String,Any> = synchronized(lock){
         val a=audio()?:return@synchronized mapOf("backend" to installed,"note" to "unavailable")
         return@synchronized runCatching{
             reconcile(a)
+            val mediaEnabled=active()&&requestedCall&&ordinary(a)&&mediaRouting
+            val uri=android.net.Uri.parse("content://"+BuildConfig.APPLICATION_ID+".settings")
+            val context=app
+            runCatching { context?.contentResolver?.call(uri,"media_route_publish",null,android.os.Bundle().apply {
+                putBoolean("enabled",mediaEnabled)
+            }) }
+            val mediaStatus=runCatching { context?.contentResolver?.call(uri,"media_route_status",null,null)
+                ?.getString("status") }.getOrNull().orEmpty()
             val types=a.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map{it.type}.toSet()
             mapOf("backend" to installed,"modeHook" to modeHook,"enabled" to active(),"callRequested" to requestedCall,
                 "a2dp" to (AudioDeviceInfo.TYPE_BLUETOOTH_A2DP in types),"leAudio" to (leDevice(a)!=null),
                 "communicationType" to currentType(a),"mode" to a.mode,"preference" to preference.name,
                 "policy" to path(a).name,"suppressedMode" to suppressedMode,"hookHits" to hits.get(),
-                "note" to routeNote,"discordCallHook" to discordCallHook)+StereoVoiceTracks.status()
+                "note" to routeNote,"discordCallHook" to discordCallHook,"mediaRouting" to mediaRouting,
+                "mediaApps" to mediaStatus,"nativeTrial" to nativeTrial)+StereoVoiceTracks.status()
         }.getOrElse{mapOf("backend" to installed,"note" to "unavailable")}
     }
     fun install(context:Context,classLoader:ClassLoader){
@@ -178,6 +197,8 @@ internal object StereoCallController {
             app=context.applicationContext?:context
             val prefs=app!!.getSharedPreferences("vexcord_stereo_native",Context.MODE_PRIVATE)
             configured=prefs.getBoolean("enabled",false)
+            mediaRouting=prefs.getBoolean("mediaRouting",false)
+            nativeTrial=prefs.getBoolean("nativeTrial",false)
             preference=runCatching{StereoRoutePolicy.Preference.valueOf(prefs.getString("mode","AUTO")!!)}.getOrDefault(StereoRoutePolicy.Preference.AUTO)
             fun hook(name:String,vararg params:Class<*>,body:(XC_MethodHook.MethodHookParam,AudioManager)->Unit):Boolean{
                 return runCatching{
@@ -296,7 +317,7 @@ internal object StereoCallController {
                                             if(generation!=callGeneration||!requestedCall||!active()||!ordinary(a))return@runCatching
                                             val type=currentType(a)
                                             if(path(a)==StereoRoutePolicy.Path.LE_COMMUNICATION&&
-                                                (selectedLe||type==AudioDeviceInfo.TYPE_BLUETOOTH_SCO||type==AudioDeviceInfo.TYPE_BLE_HEADSET))
+                                                (selectedLe||type==AudioDeviceInfo.TYPE_BLUETOOTH_SCO||type==AudioDeviceInfo.TYPE_BLE_HEADSET||leDevice(a)!=null))
                                                 requestLe(a)
                                         }
                                     }

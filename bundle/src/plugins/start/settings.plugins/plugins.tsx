@@ -18,7 +18,6 @@ import {
 import { lookupGeneratedIconComponent } from '@valenced/utils/discord'
 import { useLayoutEffect } from 'react'
 import { Setting } from '../settings/constants'
-import defer * as NavigatorHeaderWithIcon from './components/NavigatorHeaderWithIcon'
 // Alert implementations depend on Discord's design barrel, which is not
 // necessarily initialized at startup. Load each UI module only when needed.
 import defer * as InstallConfirmationAlert from './components/PluginInstallConfirmAlert'
@@ -34,9 +33,11 @@ const PluginsFailedToStartAlertKey = 'plugins-failed-to-start'
 
 /// SETTINGS ROUTES
 
-pEmitter.on('statusUpdate', plugin => {
-    // statusUpdate covers every phase, and only a started plugin registers its route
-    if (!isPluginStarted(plugin)) return
+// A plugin can already be running when this lazily imported UI is loaded.
+const registered = new WeakMap<object, unknown>()
+export function ensurePluginSettingsRoute(plugin: import('@valenced/plugins/_').AnyPlugin) {
+    if (!isPluginStarted(plugin) || !plugin.api) return
+    if (registered.get(plugin) === plugin.api) return
 
     if (plugin.SettingsComponent) {
         const api = plugin.api as PluginApi<any>
@@ -47,26 +48,13 @@ pEmitter.on('statusUpdate', plugin => {
         }: StackScreenProps<ReactNavigationParamList>) {
             // biome-ignore lint/correctness/useExhaustiveDependencies: We only want to set options once
             useLayoutEffect(() => {
-                if (plugin.manifest.icon)
-                    navigation.setOptions({
-                        headerTitle: () => (
-                            <NavigatorHeaderWithIcon.default
-                                title={plugin.manifest.name}
-                                icon={plugin.manifest.icon!}
-                            />
-                        ),
-                    })
-                else
-                    navigation.setOptions({
-                        title: plugin.manifest.name,
-                    })
+                navigation.setOptions({title: plugin.manifest.name})
             }, [])
 
             return <Component api={api} />
         }
 
-        api.cleanup(
-            registerSettingsItem(plugin.manifest.id, {
+        const removeRoute = registerSettingsItem(plugin.manifest.id, {
                 parent: Setting.Valenced,
                 type: 'route',
                 IconComponent: plugin.manifest.icon
@@ -77,13 +65,22 @@ pEmitter.on('statusUpdate', plugin => {
                     route: plugin.manifest.id,
                     getComponent: () => PluginSettings,
                 },
-            }),
-            refreshSettings,
-        )
-
-        refreshSettings()
+            })
+        registered.set(plugin, api)
+        api.cleanup(() => {
+            if (registered.get(plugin) !== api) return
+            registered.delete(plugin)
+            removeRoute()
+            optionalAlert(refreshSettings)
+        })
+        optionalAlert(refreshSettings)
     }
+}
+pEmitter.on('statusUpdate', plugin => {
+    optionalAlert(() => ensurePluginSettingsRoute(plugin))
 })
+for (const plugin of pList.values())
+    optionalAlert(() => ensurePluginSettingsRoute(plugin))
 
 /// RELOAD REQUIRED ALERT
 

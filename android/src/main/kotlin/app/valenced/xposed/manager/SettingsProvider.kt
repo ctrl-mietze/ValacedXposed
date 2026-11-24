@@ -30,10 +30,36 @@ class SettingsProvider : ContentProvider() {
         val uid = Binder.getCallingUid()
         val isSelf = uid == Process.myUid()
         val isDiscord = ctx.packageManager.getPackagesForUid(uid).orEmpty().contains("com.discord")
-        if (!isSelf && !isDiscord) throw SecurityException("ValancedX: unsupported caller")
+        val mediaPackage = ctx.packageManager.getPackagesForUid(uid).orEmpty().singleOrNull()
+            ?.takeIf { it in app.valenced.xposed.tweaks.media.MediaRouteLease.packages }
+        val mediaMethod = method == "media_route_read" || method == "media_route_report"
+        if (!isSelf && !isDiscord && !(mediaMethod && mediaPackage != null))
+            throw SecurityException("ValancedX: unsupported caller")
 
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val lease = app.valenced.xposed.tweaks.media.MediaRouteLease
+        val routingAllowed = prefs.getBoolean("hook_enabled",true) &&
+            prefs.getBoolean("javascript_enabled",true) && !prefs.getBoolean("safe_mode",false)
         return when (method) {
+            "media_route_publish" -> {
+                if(!isDiscord)throw SecurityException("Discord only")
+                lease.publish(routingAllowed && extras?.getBoolean("enabled")==true)
+                Bundle.EMPTY
+            }
+            "media_route_read" -> {
+                if(mediaPackage==null)throw SecurityException("Media app only")
+                Bundle().apply { putBoolean("enabled",routingAllowed && lease.enabled()) }
+            }
+            "media_route_report" -> {
+                if(mediaPackage==null)throw SecurityException("Media app only")
+                if(routingAllowed && lease.enabled())lease.report(mediaPackage,
+                    extras?.getInt("requested")?:0,extras?.getInt("verified")?:0,extras?.getInt("type")?:0)
+                Bundle.EMPTY
+            }
+            "media_route_status" -> {
+                if(!isDiscord && !isSelf)throw SecurityException("Manager/Discord only")
+                Bundle().apply { putString("status",lease.status()) }
+            }
             "plugin_heartbeat" -> {
                 if(!isDiscord)throw SecurityException("Only Discord can publish live connection status")
                 ManagerConnection.heartbeat(Binder.getCallingPid(),extras)
