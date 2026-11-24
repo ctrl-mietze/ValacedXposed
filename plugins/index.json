@@ -29,17 +29,30 @@
     },
     "vexcord.stereo-call": {
       "name": "Stereo Call",
-      "description": "Route-aware Bluetooth stereo priority for Discord voice. Retains normal routing on wired, USB and LE Audio devices; restores the original request when necessary.",
+      "description": "Native Discord-only AudioManager hooks. LE Audio selection or classic A2DP priority with reversible system routing. Vexcord 1.0.30+.",
       "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
       "icon": "voice_bar_bluetooth",
       "channels": {
-        "latest": "1.0.0"
+        "latest": "1.1.0"
       },
       "versions": {
         "1.0.0": {
           "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.stereo-call@1.0.0.zip",
           "sha256": "774650689247d44242953496d5656982b72ccae9b23342c301f0a4857fee0396",
           "size": 2612,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.1.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.stereo-call@1.1.0.zip",
+          "sha256": "ea9bedd26786a4319a1b40cba3db706458b02a3e7939045a668890bee835f853",
+          "size": 2274,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"

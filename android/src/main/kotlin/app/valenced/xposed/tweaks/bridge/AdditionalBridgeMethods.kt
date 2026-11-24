@@ -53,8 +53,14 @@ val additionalBridgeMethods by tweak {
 
     withAppContext { ctx ->
         val managerUri=Uri.parse("content://"+BuildConfig.APPLICATION_ID+".settings")
+        StereoCallController.install(ctx)
         registerNativeMethod("vexcord.audio.route") {
-            StereoCallStatus.get(ctx)
+            StereoCallStatus.get(ctx) + StereoCallController.status()
+        }
+        registerNativeMethod("vexcord.audio.configure") { args ->
+            val enabled=args.getOrNull(0) as? Boolean ?: false
+            val preference=args.getOrNull(1) as? String ?: "auto"
+            StereoCallController.configure(enabled,preference)
         }
         registerNativeMethod("vexcord.bitchord.session") {
             if(!PluginStatesStore.active.isPluginEnabled("vexcord.bitchord-presence"))

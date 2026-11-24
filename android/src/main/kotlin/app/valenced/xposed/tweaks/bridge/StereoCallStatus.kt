@@ -21,7 +21,7 @@ internal object StereoCallStatus {
             val active=PluginStatesStore.active.isPluginEnabled("vexcord.stereo-call")
             val route=if(Build.VERSION.SDK_INT>=31)runCatching{a.communicationDevice?.type?:0}.getOrDefault(0)else 0
             mapOf("a2dp" to a2dp,"leAudio" to le,"wired" to wired,"mode" to a.mode,"communicationType" to route,
-                "conflict" to conflict,"eligible" to (active&&a2dp&&!le&&!wired&&ordinary&&!conflict))
+                "conflict" to conflict,"eligible" to (active&&a2dp&&!wired&&ordinary&&!conflict))
         }.getOrElse{mapOf("eligible" to false,"unavailable" to true)}
     }
 }

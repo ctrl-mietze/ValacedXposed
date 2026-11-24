@@ -39,7 +39,7 @@ Vexcord extends the existing Discord Android client through an Xposed-compatible
 
 ## Vexcord Plugins
 
-The first-party catalog lives in [plugins/](plugins/). It is added once to the existing repository list on upgrade. It contains Stereo Call (Bluetooth A2DP preference) and BitChord Presence (read-only BitChord media session and listening activity). Both are opt-in and installable through the ordinary plugin manager.
+The first-party catalog lives in [plugins/](plugins/). It is added once to the existing repository list on upgrade. It contains Stereo Call (native LE Audio / A2DP routing preferences) and BitChord Presence (read-only BitChord media session and listening activity). Both are opt-in and installable through the ordinary plugin manager.
 
 [Plugin catalog index](https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/index.json) · [Plugin documentation](plugins/README.md)
 

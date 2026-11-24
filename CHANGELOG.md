@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.30 — Native Stereo Call
+
+- Stereo Call 1.1.0 moves routing control to process-local Android AudioManager hooks, with Automatic / A2DP phone microphone / LE modes.
+- Handles dual-mode headphones instead of excluding them; uses actual communication-device availability and preserves normal routing when unavailable.
+- Restores standard routing on disable or failed LE selection. Exposes hook counts and actual communication device in settings.
+- Existing plugin sources and BitChord Presence are unchanged. Restart Discord and reconnect the voice call to test.
+
 ## 1.0.29 — First-party plugins
 
 - Vexcord repository catalog, versioned plugin archives and SHA-256 index.
