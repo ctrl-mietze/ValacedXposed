@@ -7,32 +7,32 @@ export const palettes: DiscordPalette[] = [
   {
     "id": "midnight",
     "name": "Veyra Midnight",
-    "chat": "#0e1016",
-    "sidebar": "#141824",
-    "header": "#181c28",
-    "input": "#1b2030",
-    "elevated": "#1e2435",
+    "chat": "#0c0f14",
+    "sidebar": "#131823",
+    "header": "#171c28",
+    "input": "#1b2130",
+    "elevated": "#20283a",
     "accent": "#a990ff",
-    "text": "#f3f5fd",
-    "muted": "#8991a8",
-    "secondary": "#bcc3d9",
-    "border": "#262d40",
-    "selected": "#30264c"
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
+    "border": "#2a3244",
+    "selected": "#2b2440"
   },
   {
     "id": "lavender",
     "name": "Veyra Lavender",
-    "chat": "#111017",
-    "sidebar": "#191623",
-    "header": "#1e192a",
-    "input": "#242034",
-    "elevated": "#2a253c",
+    "chat": "#111116",
+    "sidebar": "#18181f",
+    "header": "#1e1e27",
+    "input": "#242430",
+    "elevated": "#2b2b38",
     "accent": "#c4a8fa",
-    "text": "#f5f0fc",
-    "muted": "#a39ab5",
-    "secondary": "#c8c0d5",
-    "border": "#373046",
-    "selected": "#3b2c56"
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
+    "border": "#383846",
+    "selected": "#322b44"
   },
   {
     "id": "frost",
@@ -43,71 +43,71 @@ export const palettes: DiscordPalette[] = [
     "input": "#1e2c3c",
     "elevated": "#253548",
     "accent": "#a4ceff",
-    "text": "#eff6ff",
-    "muted": "#91a6bd",
-    "secondary": "#bfd0e3",
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
     "border": "#304154",
     "selected": "#253f58"
   },
   {
     "id": "neon",
     "name": "Veyra Neon",
-    "chat": "#090d14",
-    "sidebar": "#111923",
-    "header": "#15202c",
-    "input": "#1a2634",
-    "elevated": "#20303f",
+    "chat": "#0a1015",
+    "sidebar": "#131b22",
+    "header": "#19232b",
+    "input": "#202c35",
+    "elevated": "#273640",
     "accent": "#55e1d9",
-    "text": "#edf7fa",
-    "muted": "#8ca7b4",
-    "secondary": "#b7cbd3",
-    "border": "#2e404d",
-    "selected": "#1a413f"
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
+    "border": "#34434d",
+    "selected": "#233b3c"
   },
   {
     "id": "glass",
     "name": "Veyra Glass",
-    "chat": "#11121a",
-    "sidebar": "#191b26",
-    "header": "#1e202e",
-    "input": "#242636",
-    "elevated": "#2b2e40",
+    "chat": "#101115",
+    "sidebar": "#17191e",
+    "header": "#1d2027",
+    "input": "#252831",
+    "elevated": "#2c303a",
     "accent": "#c2b0ff",
-    "text": "#f5f4fc",
-    "muted": "#9da0b5",
-    "secondary": "#c4c7d8",
-    "border": "#37394d",
-    "selected": "#35304d"
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
+    "border": "#3a3e49",
+    "selected": "#302d40"
   },
   {
     "id": "amoled",
     "name": "Veyra AMOLED",
     "chat": "#000000",
-    "sidebar": "#0b0d12",
+    "sidebar": "#0b0c10",
     "header": "#111319",
-    "input": "#161922",
-    "elevated": "#1d202a",
+    "input": "#171a20",
+    "elevated": "#20232b",
     "accent": "#c9b5ff",
-    "text": "#f6f5fc",
-    "muted": "#9295aa",
-    "secondary": "#c3c6d5",
-    "border": "#292d39",
-    "selected": "#2f2446"
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
+    "border": "#30343e",
+    "selected": "#29243a"
   },
   {
     "id": "bloom",
     "name": "Veyra Bloom",
-    "chat": "#120e14",
-    "sidebar": "#1d1720",
-    "header": "#241b28",
-    "input": "#2b2131",
-    "elevated": "#34283b",
+    "chat": "#111014",
+    "sidebar": "#19171c",
+    "header": "#201d24",
+    "input": "#28242d",
+    "elevated": "#302b37",
     "accent": "#f1afd3",
-    "text": "#fcf2fa",
-    "muted": "#af99ad",
-    "secondary": "#ddc8d8",
-    "border": "#473548",
-    "selected": "#4b2e46"
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
+    "border": "#413946",
+    "selected": "#382b3a"
   },
   {
     "id": "eclipse",
@@ -118,9 +118,9 @@ export const palettes: DiscordPalette[] = [
     "input": "#1d2638",
     "elevated": "#263047",
     "accent": "#aebdff",
-    "text": "#f0f3ff",
-    "muted": "#939fbb",
-    "secondary": "#c2cbe0",
+    "text": "#f4f6fc",
+    "muted": "#9ca5b8",
+    "secondary": "#c1c8d8",
     "border": "#303c54",
     "selected": "#2b3457"
   }
@@ -140,7 +140,7 @@ export function contrast(a:string,b:string):number {
 export function onColor(bg:string):string {
     return contrast(bg,'#10121a')>=contrast(bg,'#ffffff')?'#10121a':'#ffffff'
 }
-export const previewTokens=['BACKGROUND_BASE_LOWER','CHANNEL_BACKGROUND_DEFAULT','BACKGROUND_SURFACE_HIGHEST','TEXT_LINK','TEXT_STRONG','TEXT_LINK','BACKGROUND_BASE_LOW','MOBILE_FLOATINGBAR_BACKGROUND','TEXT_MUTED','BORDER_SUBTLE','BACKGROUND_MODIFIER_SELECTED']
+export const previewTokens=['BACKGROUND_BASE_LOWER','BACKGROUND_BASE_LOWEST','BACKGROUND_SURFACE_HIGHEST','TEXT_LINK','TEXT_STRONG','TEXT_LINK','BACKGROUND_BASE_LOW','MOBILE_FLOATINGBAR_BACKGROUND','TEXT_MUTED','BORDER_SUBTLE','BACKGROUND_MODIFIER_SELECTED']
 export function previewPalette(p:DiscordPalette):string[] {
     return [p.chat,p.sidebar,p.elevated,p.accent,p.text,p.accent,p.header,p.input,p.muted,p.border,p.selected]
 }
@@ -161,32 +161,28 @@ export function ownTheme(p:DiscordPalette) {
     // message attachments, avatars, role colors or arbitrary images.
     set(p.chat,'BACKGROUND_PRIMARY BACKGROUND_MOBILE_PRIMARY BACKGROUND_BASE_LOWER BG_BASE_PRIMARY CHAT_BACKGROUND')
     set(p.header,'BACKGROUND_BASE_LOW HEADER_BACKGROUND MOBILE_HEADER_BACKGROUND')
-    set(p.sidebar,'BACKGROUND_SECONDARY BACKGROUND_MOBILE_SECONDARY BACKGROUND_BASE_LOWEST CHANNEL_BACKGROUND_DEFAULT BG_BASE_SECONDARY PANEL_BG')
+    set(p.sidebar,'BACKGROUND_SECONDARY BACKGROUND_MOBILE_SECONDARY BACKGROUND_BASE_LOWEST BG_BASE_SECONDARY PANEL_BG')
+    set(p.chat,'CHANNEL_BACKGROUND_DEFAULT')
     set(mix(p.sidebar,p.chat,.45),'BACKGROUND_TERTIARY BG_BASE_TERTIARY BACKGROUND_SECONDARY_ALT')
     set(p.input,'MOBILE_FLOATINGBAR_BACKGROUND MOBILE_FLOATINGBAR_BACKGROUND_HIGHER INPUT_BACKGROUND')
-    set(p.elevated,'BACKGROUND_SURFACE_HIGH BACKGROUND_SURFACE_HIGHEST BACKGROUND_SURFACE_HIGHER BACKGROUND_FLOATING BACKGROUND_NESTED_FLOATING CARD_PRIMARY_BG CARD_SECONDARY_BG INPUT_CONTAINER_BACKGROUND')
+    set(p.elevated,'BACKGROUND_SURFACE_HIGH BACKGROUND_SURFACE_HIGHEST BACKGROUND_SURFACE_HIGHER BACKGROUND_FLOATING BACKGROUND_NESTED_FLOATING CARD_PRIMARY_BG CARD_SECONDARY_BG')
+    set(p.input,'INPUT_CONTAINER_BACKGROUND')
     set(p.selected,'BACKGROUND_MODIFIER_SELECTED BACKGROUND_MODIFIER_ACTIVE BACKGROUND_MOD_SELECTED')
     set(mix(p.sidebar,p.accent,.08),'BACKGROUND_MODIFIER_HOVER BACKGROUND_MOD_SUBTLE')
     set(p.border,'BACKGROUND_MODIFIER_ACCENT BORDER_SUBTLE BORDER_DEFAULT DIVIDER_DEFAULT')
     set(p.text,'TEXT_NORMAL TEXT_STRONG TEXT_DEFAULT HEADER_PRIMARY INTERACTIVE_ACTIVE MOBILE_TEXT_HEADING_PRIMARY CHANNELS_DEFAULT_SELECTED')
     set(p.secondary,'TEXT_SUBTLE TEXT_SECONDARY HEADER_SECONDARY INTERACTIVE_NORMAL ICON_DEFAULT CHANNELS_DEFAULT')
     set(p.muted,'TEXT_MUTED TEXT_TERTIARY INTERACTIVE_MUTED ICON_MUTED TEXT_PLACEHOLDER INPUT_PLACEHOLDER_TEXT CHANNEL_TEXT_AREA_PLACEHOLDER')
-    set(p.accent,'TEXT_LINK TEXT_BRAND ICON_BRAND INTERACTIVE_HOVER BORDER_FOCUS')
+    set(p.accent,'TEXT_LINK TEXT_BRAND ICON_BRAND BORDER_FOCUS')
+    set(p.text,'INTERACTIVE_HOVER')
     // A subdued filled brand surface distinct from bright link/accent text.
     const brand=brandFill(p)
     set(brand,'BACKGROUND_BRAND BUTTON_PRIMARY_BACKGROUND')
     set(onColor(brand),'TEXT_ON_BRAND TEXT_ON_PRIMARY BUTTON_PRIMARY_TEXT')
-    set(p.selected,'BACKGROUND_ACCENT')
+    set(p.input,'BACKGROUND_ACCENT')
     // Keep semantic status colors and role/media rendering untouched. Preserve
     // original raw neutral palette (native elements may use light-base values).
     const raw:Record<string,string>={}
-    const brandStops:Record<number,string>={
-        260:mix(p.accent,'#ffffff',.45),300:mix(p.accent,'#ffffff',.28),360:mix(p.accent,'#ffffff',.10),
-        400:p.accent,430:mix(p.accent,brand,.25),460:mix(p.accent,brand,.65),500:brand,
-        530:mix(brand,p.chat,.10),560:mix(brand,p.chat,.20),600:mix(brand,p.chat,.32),
-        630:mix(brand,p.chat,.43),660:mix(brand,p.chat,.55),700:mix(brand,p.chat,.66),730:mix(brand,p.chat,.76)
-    }
-    for(const [k,v] of Object.entries(brandStops))raw['BRAND_'+k]=v
     return {name:p.name,description:'Veyra Studio · abgestimmte Chat-, Menü- und Textfarben',
         colors:{semantic:{dark:{...semantic},darker:{...semantic},midnight:{...semantic},light:{...semantic}},raw}}
 }

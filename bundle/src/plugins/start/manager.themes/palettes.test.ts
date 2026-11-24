@@ -10,7 +10,8 @@ describe('Veyra Discord palettes',()=>{
             const theme=ownTheme(p), c=theme.colors.semantic.dark
             expect(c.BACKGROUND_BASE_LOWER).toBe(p.chat)
             expect(c.BACKGROUND_BASE_LOW).toBe(p.header)
-            expect(c.CHANNEL_BACKGROUND_DEFAULT).toBe(p.sidebar)
+            expect(c.CHANNEL_BACKGROUND_DEFAULT).toBe(p.chat)
+            expect(c.BACKGROUND_BASE_LOWEST).toBe(p.sidebar)
             expect(c.MOBILE_FLOATINGBAR_BACKGROUND).toBe(p.input)
             expect(c.MOBILE_FLOATINGBAR_BACKGROUND_HIGHER).toBe(p.input)
             expect(c.BACKGROUND_FLOATING).toBe(p.elevated)
@@ -18,7 +19,8 @@ describe('Veyra Discord palettes',()=>{
             expect(c.BACKGROUND_MODIFIER_SELECTED).toBe(p.selected)
             expect(c.TEXT_ON_BRAND).toBe(onColor(brandFill(p)))
             expect(theme.colors.semantic.midnight).toEqual(c)
-            expect(theme.colors.raw).not.toHaveProperty('PRIMARY_600')
+            expect(theme.colors.raw).toEqual({})
+            expect(c.INPUT_CONTAINER_BACKGROUND).toBe(p.input)
             expect(c).not.toHaveProperty('TEXT_FEEDBACK_CRITICAL')
             expect(new Set([p.chat,p.sidebar,p.header,p.input,p.elevated]).size).toBe(5)
         }
