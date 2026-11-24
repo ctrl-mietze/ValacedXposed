@@ -74,6 +74,12 @@ class ValancedXActivity : Activity() {
 
     private val tabs = arrayOf("Start", "Module", "Plugins", "Themes", "Diagnose", "Info")
     private var currentTab = 0
+    private var modulePage=0
+    private var pluginFilter=0
+    private var pluginLimit=36
+    private var showSystemPlugins=false
+    private fun vencordEnabled()=prefs.getBoolean("vencord_integration",true)
+    private fun analyzerVisible()=currentTab==1&&modulePage!=0
     private var scrollView: ScrollView? = null
     private var connectionGranted = false
     private val liveConnection by lazy {DiscordConnectionController(applicationContext)}
@@ -92,7 +98,7 @@ class ValancedXActivity : Activity() {
             // One fresh read per view/peer session, never interrupt a real operation.
             val request=when{
                 currentTab==3&&themePage==0&&peer.themeReady->"theme_snapshot"
-                currentTab==2->"snapshot"
+                currentTab==1||currentTab==2->"snapshot"
                 else->null
             }
             val key=peer.pid.toString()+"|"+request.orEmpty()
@@ -140,7 +146,7 @@ class ValancedXActivity : Activity() {
         super.onDestroy()
     }
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val refresh = Runnable { if (currentTab != 2 && currentTab != 3) render(preserveScroll = true) }
+    private val refresh = Runnable { if (currentTab != 2 && currentTab != 3 && !analyzerVisible()) render(preserveScroll = true) }
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key?.startsWith("last_") == true || key?.startsWith("total_") == true ||
             key == "event_history" || key == "error_streak") {
@@ -161,7 +167,14 @@ class ValancedXActivity : Activity() {
         }.getOrNull()
         discordThemeState=pluginData?.optJSONObject("themeState")
         currentTab = (savedInstanceState?.getInt("tab") ?: prefs.getInt("manager_tab",0)).coerceIn(0, tabs.lastIndex)
+        modulePage=(savedInstanceState?.getInt("modulePage")?:prefs.getInt("manager_module_page",0)).coerceIn(0,2)
         pluginPage = (savedInstanceState?.getInt("pluginPage") ?: prefs.getInt("manager_plugin_page",0)).coerceIn(0,5)
+        if(pluginPage>=4){
+            if(currentTab==2){currentTab=1;modulePage=if(pluginPage==5)1 else 2}
+            pluginPage=0
+        }
+        pluginFilter=(savedInstanceState?.getInt("pluginFilter")?:0).coerceIn(0,2)
+        showSystemPlugins=prefs.getBoolean("manager_show_system_plugins",false)
         themePage = (savedInstanceState?.getInt("themePage") ?: prefs.getInt("manager_theme_page",0)).coerceIn(0,1)
         themeKind = savedInstanceState?.getString("themeKind") ?: prefs.getString("manager_theme_kind","themes") ?: "themes"
         pluginQuery = savedInstanceState?.getString("pluginQuery").orEmpty()
@@ -185,7 +198,7 @@ class ValancedXActivity : Activity() {
     }
 
     override fun onPause() {
-        prefs.edit().putInt("manager_tab",currentTab).putInt("manager_plugin_page",pluginPage).putInt("manager_theme_page",themePage).putString("manager_theme_kind",themeKind).apply()
+        prefs.edit().putInt("manager_tab",currentTab).putInt("manager_plugin_page",pluginPage).putInt("manager_module_page",modulePage).putInt("manager_theme_page",themePage).putString("manager_theme_kind",themeKind).apply()
         prefs.unregisterOnSharedPreferenceChangeListener(listener)
         mainHandler.removeCallbacks(refresh)
         mainHandler.removeCallbacks(pluginPoll)
@@ -208,6 +221,8 @@ class ValancedXActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("tab", currentTab)
         outState.putInt("pluginPage", pluginPage)
+        outState.putInt("modulePage",modulePage)
+        outState.putInt("pluginFilter",pluginFilter)
         outState.putInt("themePage",themePage)
         outState.putString("themeKind",themeKind)
         outState.putString("pluginQuery", pluginQuery)
@@ -447,6 +462,45 @@ class ValancedXActivity : Activity() {
     }
 
     private fun modules(parent: LinearLayout) {
+        if(modulePage!=0){
+            add(parent,button("‹  Module"){modulePage=0;render()},top=5)
+            busyStrip(parent)
+            if(modulePage==1)vencordScreen(parent) else analysisScreen(parent)
+            return
+        }
+        eyebrow(parent,"MODULE")
+        add(parent,label("Module",27f,whiteColor,true),top=4)
+        add(parent,label("Kompatibilität und System-Erweiterungen",13f,mutedColor),top=5)
+        card(parent,top=12){
+            val bindings=vencordBindings.values.flatten()
+            val enabled=vencordEnabled()
+            val active=analysisItems("installed").count{it.optBoolean("enabled")&&vencordBindings.containsKey(it.optString("id"))}
+            val row=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}
+            val details=column()
+            add(details,label("Vencord Compiler",18f,whiteColor,true))
+            add(details,label(if(enabled)"Integration aktiv" else "Integration deaktiviert",12f,if(enabled)mintColor else mutedColor),top=4)
+            row.addView(details,LinearLayout.LayoutParams(0,-2,1f))
+            row.addView(Switch(this@ValancedXActivity).apply{
+                isChecked=enabled;applySwitchPalette(this);contentDescription="Vencord-Integration"
+                isEnabled=pluginJob==null&&analysisJob?.isActive!=true
+                setOnCheckedChangeListener{_,checked->
+                    prefs.edit().putBoolean("vencord_integration",checked).apply()
+                    if(!checked&&pluginFilter==2)pluginFilter=0
+                    render(preserveScroll=true)
+                }
+            })
+            add(this,row)
+            add(this,label(bindings.size.toString()+" Vencord-Einträge · "+vencordBindings.size+" Mobile-Plugins · "+active+" aktiviert",12f,mutedColor),top=7)
+            add(this,label("Mobile-Ports werden in der normalen Plugin-Liste angezeigt. Bereits aktive Plugins bleiben beim Ausschalten der Integration erhalten.",11f,mutedColor),top=5)
+            twoActions(this,button("Compiler-Details"){modulePage=1;render()},button("Plugins öffnen",true){
+                currentTab=2;pluginPage=1;pluginFilter=if(vencordEnabled())2 else 0;pluginQuery="";pluginLimit=36;render()
+            },top=9)
+        }
+        card(parent,top=9){
+            add(this,label("Plugin Lab",17f,whiteColor,true))
+            add(this,label("Isolierte lokale Analyse und Quellberichte.",12f,mutedColor),top=4)
+            add(this,button("Analyzer öffnen"){modulePage=2;render()},top=8)
+        }
         eyebrow(parent, "Hook-Konfiguration")
         card(parent) {
             setting(this, "ValancedX-Erweiterungen", "Steuert die Hermes-Injektion. Der native Xposed-Hook wird früh registriert.", "hook_enabled", true)
@@ -814,9 +868,9 @@ class ValancedXActivity : Activity() {
             }
             updateBusyStrip()
             lastActionKey=null
-            if (currentTab == 3) render(preserveScroll=true)
+            if (currentTab == 3||currentTab==1) render(preserveScroll=true)
             if (currentTab == 2) {
-                if (target != null && pluginPage == 1 && discoveryControls.isNotEmpty()) {
+                if (target != null && pluginPage == 1 && target in discoveryControls) {
                     // Update the existing views, not the whole ScrollView.
                     updateDiscoveryControls()
                 } else {
@@ -1011,15 +1065,16 @@ class ValancedXActivity : Activity() {
     private fun updateBusyStrip(){
         val job=pluginJob
         val status=job?.let{ManagerPluginMailbox.status(it)}
-        busyLabel?.text=if(job!=null)status?.first ?: "Warte auf Discord …" else pluginNote.ifBlank{"Bereit"}
-        busyLabel?.setTextColor(if(job!=null)accentColor else mutedColor)
-        busyProgress?.visibility=if(job!=null)View.VISIBLE else View.INVISIBLE
+        val analyzing=analysisJob?.isActive==true
+        busyLabel?.text=if(analyzing)analysisNote else if(job!=null)status?.first ?: "Warte auf Discord …" else pluginNote.ifBlank{"Bereit"}
+        busyLabel?.setTextColor(if(job!=null||analyzing)accentColor else mutedColor)
+        busyProgress?.visibility=if(job!=null||analyzing)View.VISIBLE else View.GONE
         busyProgress?.let{bar->
             val percent=status?.second?:-1
             if(bar.isIndeterminate!=(percent<0))bar.isIndeterminate=percent<0
             if(percent>=0)bar.progress=percent
         }
-        busyCancel?.visibility=if(job!=null&&status?.first=="Warte auf Discord")View.VISIBLE else View.INVISIBLE
+        busyCancel?.visibility=if(analyzing||job!=null&&status?.first=="Warte auf Discord")View.VISIBLE else View.GONE
         val current=lastActionKey?.let{actionControls[it]}
         if(job!=null&&current!=null){
             val value=if((status?.second?:-1)>=0)"Installiere … "+status!!.second+"%" else status?.first?:"Wird verarbeitet …"
@@ -1034,7 +1089,10 @@ class ValancedXActivity : Activity() {
         row.addView(busyLabel,LinearLayout.LayoutParams(0,dp(22),1f))
         busyCancel=label("Abbrechen",11f,accentColor,true).apply{
             gravity=Gravity.CENTER;setPadding(dp(8),0,dp(8),0)
-            setOnClickListener{if(pluginJob?.let{ManagerPluginMailbox.cancel(it)}!=true)Toast.makeText(this@ValancedXActivity,"Aktion läuft bereits.",Toast.LENGTH_SHORT).show()}
+            setOnClickListener{
+                if(analysisJob?.isActive==true)analysisJob?.cancel()
+                else if(pluginJob?.let{ManagerPluginMailbox.cancel(it)}!=true)Toast.makeText(this@ValancedXActivity,"Aktion läuft bereits.",Toast.LENGTH_SHORT).show()
+            }
         }
         row.addView(busyCancel,LinearLayout.LayoutParams(-2,dp(22)))
         add(strip,row)
@@ -1498,7 +1556,7 @@ class ValancedXActivity : Activity() {
     private var analysisFilter="installed"
     private var analysisLimit=60
     private var vencordQuery=""
-    private var vencordLimit=60
+    private var vencordLimit=36
     private var vencordFilter=0
     private val vencordCatalog by lazy {
         runCatching{app.valenced.xposed.manager.analysis.VencordTranslator.catalog(this)}.getOrElse{JSONObject()}
@@ -1508,9 +1566,82 @@ class ValancedXActivity : Activity() {
             else pluginData?.optJSONArray(if(kind=="catalog")"available" else "installed")
         return (0 until (arr?.length()?:0)).mapNotNull{arr?.optJSONObject(it)}
     }
+    private val vencordBindings by lazy {PluginCatalogView.bindings(analysisItems("vencord"))}
+    private fun installedBinding(item:JSONObject)=PluginCatalogView.forEntry(item,vencordBindings,true)
+    private fun availableBinding(item:JSONObject)=PluginCatalogView.forEntry(item,vencordBindings,false)
+    private fun runtimeLabel(item:JSONObject):String{
+        val r=item.optJSONObject("compilerRuntime")?:return "Runtime unbestätigt"
+        val status=r.optString("status")
+        val bound=r.optJSONArray("bound")?.length()?:0
+        val total=r.optJSONArray("expected")?.length()?:0
+        return when(status){"bound"->"Hooks "+bound+"/"+total+" gebunden";"partial"->"Hooks "+bound+"/"+total+" teilweise";"waiting"->"Wartet auf Module";"stopped"->"Runtime gestoppt";else->"Runtime unbestätigt"}
+    }
+    private fun activateTranslated(binding:PluginCatalogView.Binding){
+        if(!vencordEnabled()){Toast.makeText(this,"Vencord-Integration unter Module aktivieren.",Toast.LENGTH_SHORT).show();return}
+        if(pluginJob!=null||analysisJob?.isActive==true){Toast.makeText(this,"Eine Aktion läuft bereits.",Toast.LENGTH_SHORT).show();return}
+        val report=analyzer.report(binding.source,"vencord")
+        // A cached isolated report is version-scoped and includes every source file.
+        if(binding.rule.kind!="repository"&&report!=null&&report.optString("verifiedTreeHash")==binding.rule.treeHash&&
+            !report.has("error")&&report.optJSONObject("translation")?.optBoolean("supported")==true){
+            pluginAction("vencord_activate",JSONObject().put("id",binding.sourceId).put("sha256",binding.rule.sourceHash).put("treeHash",binding.rule.treeHash))
+        }else startAnalysis(listOf(binding.source),"vencord",translate=true)
+    }
+    private fun pluginDetails(item:JSONObject,kind:String,aliases:List<PluginCatalogView.Binding>,variants:List<JSONObject> = emptyList()){
+        val id=item.optString("id")
+        val options=mutableListOf<Pair<String,()->Unit>>()
+        options.add("Plugin-Informationen" to {
+            val runtime=item.optJSONObject("compilerRuntime")
+            val details=buildString{
+                append(item.optString("description")).append("\n\n").append(id)
+                append("\nVersion: ").append(item.optString("version"))
+                append("\nAutor: ").append(item.optString("author"))
+                if(item.optString("repo").isNotBlank())append("\nQuelle: ").append(item.optString("repo"))
+                if(runtime!=null)append("\n\n").append(runtimeLabel(item)).append("\n").append(runtime.optJSONArray("bound")?.toString().orEmpty())
+                for(alias in aliases)append("\n\nVencord: ").append(alias.title).append("\n").append(alias.rule.adaptation).append("\n").append(alias.rule.limitation)
+            }
+            AlertDialog.Builder(this@ValancedXActivity).setTitle(item.optString("name",id)).setMessage(details).setPositiveButton("Schließen",null).show()
+        })
+        if(aliases.isNotEmpty()){
+            options.add("Vencord-Quellbericht" to {
+                if(aliases.size==1)showAnalysis(aliases.first().source,app.valenced.xposed.manager.analysis.VencordTranslator.inventoryReport(aliases.first().source))
+                else AlertDialog.Builder(this@ValancedXActivity).setTitle("Vencord-Zuordnungen").setItems(aliases.map{it.title}.toTypedArray()){_,which->
+                    val source=aliases[which].source
+                    showAnalysis(source,app.valenced.xposed.manager.analysis.VencordTranslator.inventoryReport(source))
+                }.show()
+            })
+        }
+        options.add("Lokale Plugin-Analyse" to {
+            val report=analyzer.report(item,kind)
+            if(report==null)startAnalysis(listOf(item),kind,show=true) else showAnalysis(item,report)
+        })
+        if(variants.size>1)options.add("Quellen und Versionen ("+variants.size+")" to {choosePluginSource(variants)})
+        if(kind=="catalog"&&aliases.isNotEmpty())options.add("Nur installieren, nicht aktivieren" to {pluginAction("install_direct",JSONObject().put("id",id).put("repo",item.optString("repo")))})
+        if(kind=="installed"&&!item.optBoolean("essential")&&!item.optBoolean("internal"))options.add("Deinstallieren" to {
+            AlertDialog.Builder(this@ValancedXActivity).setTitle("Plugin deinstallieren?").setMessage("Auch lokale Daten dieses Plugins werden gelöscht.")
+                .setNegativeButton("Abbrechen",null).setPositiveButton("Deinstallieren"){_,_->pluginAction("uninstall",JSONObject().put("id",id))}.show()
+        })
+        AlertDialog.Builder(this).setTitle(item.optString("name",id)).setItems(options.map{it.first}.toTypedArray()){_,which->options[which].second()}.show()
+    }
+    private fun choosePluginSource(items:List<JSONObject>){
+        if(items.isEmpty())return
+        val rows=items.map{item->
+            val host=Uri.parse(item.optString("repo")).host?:item.optString("repo")
+            host+" · v"+item.optString("version")+if(item.optBoolean("installed")&&item.optString("installedVersion")==item.optString("version"))" · installiert" else ""
+        }
+        AlertDialog.Builder(this).setTitle("Plugin-Quelle auswählen").setItems(rows.toTypedArray()){_,which->
+            val item=items[which]
+            val aliases=if(vencordEnabled())availableBinding(item)else emptyList()
+            if(aliases.isNotEmpty()){
+                AlertDialog.Builder(this).setTitle(item.optString("name")).setItems(arrayOf("Mobile-Port aktivieren","Nur installieren")){_,choice->
+                    if(choice==0)activateTranslated(aliases.first()) else pluginAction("install_direct",JSONObject().put("id",item.optString("id")).put("repo",item.optString("repo")))
+                }.show()
+            }else pluginAction("install_direct",JSONObject().put("id",item.optString("id")).put("repo",item.optString("repo")))
+        }.show()
+    }
     private fun analysisProgress(note:String){
         analysisNote=note
         analysisLabel?.text=note
+        updateBusyStrip()
     }
     private fun showAnalysis(item:JSONObject,r:JSONObject){
         val text=StringBuilder()
@@ -1576,6 +1707,7 @@ class ValancedXActivity : Activity() {
     }
     private fun startAnalysis(items:List<JSONObject>,kind:String,show:Boolean=false,translate:Boolean=false){
         if(items.isEmpty())return
+        if(translate&&!vencordEnabled()){Toast.makeText(this,"Vencord unter Module aktivieren.",Toast.LENGTH_SHORT).show();return}
         if(pluginJob!=null||restartRunning||analysisJob?.isActive==true){
             Toast.makeText(this,"Eine Aktion läuft bereits.",Toast.LENGTH_SHORT).show();return
         }
@@ -1591,9 +1723,14 @@ class ValancedXActivity : Activity() {
                 }
                 analysisProgress(done.toString()+" analysiert · "+failures+" nicht abgeschlossen")
             }catch(e:kotlinx.coroutines.CancellationException){analysisProgress("Analyse gestoppt · "+done+" abgeschlossen");throw e}
-            finally{analysisJob=null}
+            finally{
+                analysisJob=null
+                if(!isFinishing&&!isDestroyed){
+                    if(analyzerVisible()||currentTab==2)render(preserveScroll=true)
+                    else updateBusyStrip()
+                }
+            }
             if(isFinishing||isDestroyed)return@launch
-            if(currentTab==2&&(pluginPage==4||pluginPage==5))render(preserveScroll=true)
             val result=last
             if(translate&&result!=null){
                 val plan=result.optJSONObject("translation")
@@ -1612,7 +1749,7 @@ class ValancedXActivity : Activity() {
         }
         analysisProgress("Sandbox wird vorbereitet …")
         analysisJob?.start()
-        if(currentTab==2&&(pluginPage==4||pluginPage==5))render(preserveScroll=true)
+        if(analyzerVisible())render(preserveScroll=true)
     }
     private fun analysisEntry(parent:LinearLayout,item:JSONObject,kind:String){
         val report=analyzer.report(item,kind)
@@ -1665,22 +1802,24 @@ class ValancedXActivity : Activity() {
         })
     }
     private fun vencordScreen(parent:LinearLayout){
-        eyebrow(parent,"VENCORD → MOBILE")
+        eyebrow(parent,"VENCORD COMPILER")
         val entries=analysisItems("vencord")
         val summary=vencordCatalog.optJSONObject("summary")?:JSONObject()
         val modes=summary.optJSONObject("modes")?:JSONObject()
-        val supported=modes.optInt("compiled")+modes.optInt("bundled")+modes.optInt("repository")
+        val supported=vencordBindings.values.sumOf{it.size}
         card(parent,top=8){
-            add(this,label("Vencord Compiler",23f,whiteColor,true))
-            add(this,label(entries.size.toString()+" Plugins · "+summary.optInt("files")+" Dateien untersucht",13f,mintColor),top=5)
-            add(this,label(modes.optInt("compiled").toString()+" AST-kompilierte Ports · "+modes.optInt("bundled")+" integrierte · "+modes.optInt("repository")+" Android-Gegenstücke",12f,accentColor),top=5)
-            add(this,label("Vollständige Quellberichte offline. Beim Aktivieren wird der gesamte Plugin-Quellbaum per SHA-256 geprüft. Der Compiler verwendet ausschließlich geprüfte Mobile-Operationen; Desktop-Hooks werden nicht direkt ausgeführt.",12f,mutedColor),top=6)
-            add(this,label("Revision: "+vencordCatalog.optString("revision").take(12)+" · "+summary.optInt("internalDefinitions")+" interne API-Komponenten",10f,mutedColor),top=6)
+            add(this,label("Compiler & Quellberichte",22f,whiteColor,true))
+            add(this,label(entries.size.toString()+" Desktop-Plugins · "+summary.optInt("files")+" Dateien",13f,mutedColor),top=5)
+            add(this,label(modes.optInt("compiled").toString()+" generiert · "+modes.optInt("bundled")+" integriert · "+modes.optInt("repository")+" Gegenstücke",12f,accentColor),top=5)
+            add(this,label(vencordBindings.size.toString()+" unterschiedliche Mobile-Plugins · "+modes.optInt("manual")+" ohne Port",11f,mutedColor),top=4)
+            add(this,label("Die normale Plugin-Liste enthält alle vorbereiteten Mobile-Ports. Dieser Bereich dient Quellanalyse und Diagnosen.",12f,mutedColor),top=7)
+            add(this,label("Revision "+vencordCatalog.optString("revision").take(12)+" · "+summary.optInt("internalDefinitions")+" API-Komponenten",10f,mutedColor),top=6)
+            add(this,button("Mobile-Plugins öffnen",true){currentTab=2;pluginPage=1;pluginFilter=if(vencordEnabled())2 else 0;pluginQuery="";pluginLimit=36;render()},top=8)
             analysisLabel=label(analysisNote,11f,accentColor);add(this,analysisLabel!!,top=5)
             if(analysisJob?.isActive==true)add(this,button("Analyse stoppen"){analysisJob?.cancel();render(preserveScroll=true)},top=7)
-            else twoActions(this,button("Alle lokal prüfen",true){
-                AlertDialog.Builder(this@ValancedXActivity).setTitle("Alle "+entries.size+" Plugin-Quellbäume prüfen?")
-                    .setMessage("Alle gepinnten Dateien werden heruntergeladen, verifiziert und pro Plugin getrennt statisch untersucht. Kein Plugin wird aktiviert.")
+            else twoActions(this,button("Alle lokal prüfen"){
+                AlertDialog.Builder(this@ValancedXActivity).setTitle("Alle "+entries.size+" Quellbäume prüfen?")
+                    .setMessage("Alle Dateien werden verifiziert und getrennt statisch untersucht. Keine Aktivierung.")
                     .setNegativeButton("Abbrechen",null).setPositiveButton("Starten"){_,_->startAnalysis(entries,"vencord")}.show()
             },button("API-Inventar"){
                 val internal=vencordCatalog.optJSONArray("internal")?:JSONArray()
@@ -1688,176 +1827,193 @@ class ValancedXActivity : Activity() {
                     it.optString("name")+" · "+it.optInt("codeFiles")+" Code-Dateien\n"+(it.optJSONArray("features")?.let{arr->(0 until arr.length()).joinToString(", "){i->arr.optString(i)}}?:"")
                 }
                 AlertDialog.Builder(this@ValancedXActivity).setTitle("Interne Vencord-APIs").setMessage(message).setPositiveButton("Schließen",null).show()
-            })
+            },top=7)
         }
-        segmented(parent,listOf("Alle","Mobile ("+supported+")","Manuell"),vencordFilter,{i->vencordFilter=i;vencordLimit=60;render(preserveScroll=true)})
-        val search=EditText(this).apply{hint="Vencord-Plugin suchen …";setText(vencordQuery);setTextColor(whiteColor);setHintTextColor(mutedColor);setSingleLine(true);background=rounded(surfaceColor,borderColor,14);setPadding(dp(12),dp(10),dp(12),dp(10))}
+        segmented(parent,listOf("Alle","Mobile ("+supported+")","Offen"),vencordFilter,{i->vencordFilter=i;vencordLimit=36;render(preserveScroll=true)})
+        val search=EditText(this).apply{hint="Quellberichte suchen …";setText(vencordQuery);setTextColor(whiteColor);setHintTextColor(mutedColor);setSingleLine(true);background=rounded(surfaceColor,borderColor,14);setPadding(dp(12),dp(10),dp(12),dp(10))}
         add(parent,search,top=10)
         val list=column();add(parent,list,top=5)
-        val installed=analysisItems("installed")
         fun draw(){
             list.removeAllViews()
             val matching=entries.filter{it.optString("name").contains(vencordQuery,true)||it.optString("id").contains(vencordQuery,true)}
                 .filter{val ready=app.valenced.xposed.manager.analysis.VencordTranslator.rules.containsKey(it.optString("id"))
                     vencordFilter==0||(vencordFilter==1&&ready)||(vencordFilter==2&&!ready)}
-                .sortedWith(compareByDescending<JSONObject>{app.valenced.xposed.manager.analysis.VencordTranslator.rules[it.optString("id")]?.kind=="compiled"}
-                    .thenByDescending{app.valenced.xposed.manager.analysis.VencordTranslator.rules.containsKey(it.optString("id"))}.thenBy{it.optString("name").lowercase(Locale.ROOT)})
-            eyebrow(list,matching.size.toString()+" PLUGINS")
-            for(item in matching.take(vencordLimit))card(list,top=8){
+                .sortedBy{it.optString("name").lowercase(Locale.ROOT)}
+            eyebrow(list,matching.size.toString()+" QUELLBERICHTE")
+            for(item in matching.take(vencordLimit))card(list,top=6){
                 val id=item.optString("id")
-                val plan=app.valenced.xposed.manager.analysis.VencordTranslator.plan(id,item.optString("sha256"),item.optString("treeHash"))
-                val ready=plan.optBoolean("supported")
-                val target=plan.optString("target")
-                val mobile=installed.firstOrNull{it.optString("id")==target}
-                val active=ready&&mobile?.optBoolean("enabled")==true
-                val mode=plan.optString("mode")
+                val rule=app.valenced.xposed.manager.analysis.VencordTranslator.rules[id]
+                val row=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}
+                val details=column()
+                add(details,label(item.optString("name",id),15f,whiteColor,true))
+                add(details,label(when(rule?.kind){"compiled"->"Generierter Port";"bundled"->"Integrierter Port";"repository"->"Android-Gegenstück";else->"Kein Mobile-Port"}+" · "+item.optInt("files")+" Dateien",11f,if(rule!=null)mintColor else mutedColor),top=4)
+                row.addView(details,LinearLayout.LayoutParams(0,-2,1f))
+                row.addView(button("Bericht"){showAnalysis(item,app.valenced.xposed.manager.analysis.VencordTranslator.inventoryReport(item))})
+                add(this,row)
+                if(analyzer.report(item,"vencord")!=null)add(this,button("Lokaler Bericht"){showAnalysis(item,analyzer.report(item,"vencord")?:JSONObject())},top=5)
                 tag="vx-vencord-"+id
-                add(this,label(item.optString("name"),16f,whiteColor,true))
-                add(this,label(item.optString("description"),12f,mutedColor),top=4)
-                add(this,label(if(active)"Mobile-Port aktiviert" else if(mode=="compiled")"AST-kompilierter Mobile-Port"
-                    else if(mode=="repository")"Android-Gegenstück · geprüfte ZIP" else if(ready)"Integrierter Mobile-Port" else "Manueller Port erforderlich",11f,if(ready)mintColor else warmColor),top=5)
-                if(mode=="compiled"&&active){
-                    val runtime=mobile?.optJSONObject("compilerRuntime")
-                    val state=runtime?.optString("status").orEmpty()
-                    val hooks=runtime?.optJSONArray("bound")
-                    val expected=runtime?.optJSONArray("expected")
-                    val hooked=hooks?.length()?:0
-                    val total=expected?.length()?:0
-                    val status=when(state){"bound"->"Alle Metro-Hooks gebunden";"partial"->"Teilweise gebunden";"waiting"->"Wartet auf Metro-Module";"stopped"->"Runtime gestoppt";else->"Noch kein Runtime-Nachweis"}
-                    add(this,label(status+" · "+hooked+"/"+total+" Hooks",11f,if(state=="bound")mintColor else warmColor),top=5)
-                    if(hooks!=null&&hooks.length()>0)add(this,label((0 until hooks.length()).joinToString(", "){hooks.optString(it)},10f,mutedColor),top=3)
-                    add(this,button("Hook-Status aktualisieren"){pluginAction("snapshot")},top=6)
-                }
-                val ast=item.optJSONObject("analysis")?:JSONObject()
-                add(this,label(ast.optInt("codeFiles").toString()+" Code-Dateien · "+ast.optInt("patchCount")+" Webpack-Patches · "+(ast.optJSONArray("sharedApis")?.length()?:0)+" Vencord-APIs",11f,mutedColor),top=4)
-                if(ready){
-                    add(this,label(plan.optString("adaptation"),12f,whiteColor),top=6)
-                    add(this,label(plan.optString("limitation"),11f,mutedColor),top=4)
-                    if(mode=="repository")add(this,label("Mobile: "+target+" · v"+plan.optString("version")+"\n"+Uri.parse(plan.optString("repo")).host.orEmpty(),11f,mutedColor),top=5)
-                    add(this,button(if(active)"Mobile-Port deaktivieren" else if(mode=="repository")"Mobile-Gegenstück aktivieren" else "Übersetzen & aktivieren",!active){
-                        if(active)pluginAction("vencord_disable",JSONObject().put("id",id))
-                        else startAnalysis(listOf(item),"vencord",translate=true)
-                    },top=7)
-                }else{
-                    add(this,label(item.optJSONObject("translation")?.optString("reason").orEmpty().take(350),11f,mutedColor),top=6)
-                }
-                val report=analyzer.report(item,"vencord")
-                twoActions(this,button("Quellbericht"){showAnalysis(item,app.valenced.xposed.manager.analysis.VencordTranslator.inventoryReport(item))},
-                    button(if(report==null)"Lokal prüfen" else "Lokaler Bericht"){
-                        if(report==null)startAnalysis(listOf(item),"vencord",show=true) else showAnalysis(item,report)
-                    },top=8)
-                if(report!=null)add(this,button("Erneut lokal prüfen"){startAnalysis(listOf(item),"vencord",show=true)},top=5)
             }
-            if(matching.size>vencordLimit)add(list,button("Weitere anzeigen"){vencordLimit+=60;draw()},top=8)
+            if(matching.size>vencordLimit)add(list,button("Weitere anzeigen"){vencordLimit+=36;draw()},top=8)
         }
         draw()
         search.addTextChangedListener(object:android.text.TextWatcher{
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
-            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){vencordQuery=s?.toString().orEmpty();vencordLimit=60;draw()}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){vencordQuery=s?.toString().orEmpty();vencordLimit=36;draw()}
             override fun afterTextChanged(s:android.text.Editable?){}
         })
     }
 
     private fun pluginScreen(parent: LinearLayout) {
-        eyebrow(parent, "PLUGIN MANAGER")
-        add(parent, label("Plugins", 27f, whiteColor, true), top = 4)
-        add(parent, label("Installieren, verwalten und Quellen hinzufügen.", 13f, mutedColor), top = 5)
-        segmented(parent,listOf("Installiert","Entdecken","Quellen","Legacy"),if(pluginPage<=3)pluginPage else -1,{i->
-            pluginPage=i;pluginQuery="";render()
+        eyebrow(parent,"PLUGIN MANAGER")
+        add(parent,label("Plugins",27f,whiteColor,true),top=4)
+        add(parent,label("Installieren und verwalten",13f,mutedColor),top=4)
+        segmented(parent,listOf("Installiert","Entdecken","Quellen","Legacy"),pluginPage.coerceIn(0,3),{i->
+            pluginPage=i;pluginQuery="";pluginFilter=0;pluginLimit=36;render()
             if(pluginData==null&&pluginJob==null)pluginAction("snapshot")
-        },15)
-        twoActions(parent,button("Analyse",pluginPage==4){pluginPage=4;render()},button("Vencord",pluginPage==5){pluginPage=5;render()},top=7)
+        },12)
         discoveryControls.clear()
         busyStrip(parent)
-        if(pluginPage==4){analysisScreen(parent);return}
-        if(pluginPage==5){vencordScreen(parent);return}
         if(pluginPage==2){sourceScreen(parent);return}
         if(pluginPage==3){legacyScreen(parent);return}
-        twoActions(parent,operationButton("Aktualisieren",if(pluginPage==0)"snapshot" else "refresh"),
-            button("Discord neu starten"){restartDiscord()})
-        if(pluginPage==1)add(parent,label("Ein Tipp installiert das Plugin. Neue Plugins bleiben bis zur Aktivierung aus.",11f,mutedColor),top=8)
-        disconnectNotice(parent)
-        val search = EditText(this).apply {
-            hint = "Plugins suchen …"
-            setText(pluginQuery)
-            setTextColor(whiteColor)
-            setHintTextColor(mutedColor)
-            setSingleLine(true)
-            setPadding(dp(14),dp(10),dp(14),dp(10))
-            background = rounded(surfaceColor,borderColor,14)
+        val installed=analysisItems("installed")
+        val available=analysisItems("catalog")
+        val integrated=installed.filter{it.optBoolean("internal")&&installedBinding(it).isNotEmpty()}
+        if(!vencordEnabled()&&pluginFilter==2)pluginFilter=0
+        if(pluginPage==1&&pluginFilter==1)pluginFilter=0
+        val filters=if(pluginPage==0)listOf("Alle","Aktiv","Vencord")else listOf("Alle","Vencord")
+        if(vencordEnabled()||pluginPage==0){
+            val names=if(vencordEnabled())filters else listOf("Alle","Aktiv")
+            val selected=if(pluginPage==1&&pluginFilter==2)1 else pluginFilter
+            segmented(parent,names,selected,{i->
+                pluginFilter=if(pluginPage==1&&i==1)2 else i;pluginLimit=36;render(preserveScroll=true)
+            },7)
         }
-        add(parent, search, top = 12)
-        val list = column()
-        add(parent, list, top = 4)
-        fun showEntries() {
-            list.removeAllViews()
-            discoveryControls.clear()
-            val entries = pluginData?.optJSONArray(if (pluginPage == 0) "installed" else "available") ?: JSONArray()
-            val filtered = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
-                .filter { item ->
-                    // The dedicated Legacy page owns these controls. External
-                    // imports remain visible there even after the mode is reenabled.
-                    val id=item.optString("id")
-                    pluginPage!=0||(!id.startsWith("veyra.port.")&&!id.startsWith("veyra.legacy."))
+        val tools=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL}
+        val info=label(if(pluginPage==0)"Installierte Plugins" else "Repository-Katalog",12f,mutedColor,true)
+        tools.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+        tools.addView(button("⋯"){
+            val options=if(pluginPage==0)arrayOf("Aktualisieren","Discord neu starten",if(showSystemPlugins)"System-Plugins ausblenden" else "System-Plugins anzeigen","Plugin Lab")
+                else arrayOf("Quellen aktualisieren","Discord neu starten","Plugin Lab")
+            AlertDialog.Builder(this@ValancedXActivity).setTitle("Plugin-Manager").setItems(options){_,which->
+                when(which){
+                    0->pluginAction(if(pluginPage==0)"snapshot" else "refresh")
+                    1->restartDiscord()
+                    2->if(pluginPage==0){showSystemPlugins=!showSystemPlugins;prefs.edit().putBoolean("manager_show_system_plugins",showSystemPlugins).apply();render(preserveScroll=true)}
+                        else {currentTab=1;modulePage=2;render()}
+                    else->{currentTab=1;modulePage=2;render()}
                 }
-                .filter { item -> listOf("name","description","id","author").any { item.optString(it).contains(pluginQuery, ignoreCase = true) } }
-                .sortedBy { it.optString("name").lowercase(Locale.ROOT) }
-            eyebrow(list, "${filtered.size} Plugins")
-            if (filtered.isEmpty()) add(list,label("Keine Einträge. Quellen hinzufügen oder aktualisieren.",13f,mutedColor),top=8)
-            for (item in filtered) {
-                val id = item.optString("id")
-                card(list, top = 8) {
-                    tag="vx-plugin-"+id+"|"+item.optString("repo")
-                    add(this,label(item.optString("name",id),16f,whiteColor,true))
-                    add(this,label("v" + item.optString("version") + " · " + item.optString("author").substringBefore(" <").substringBefore(" (").trim(),11f,accentColor),top=4)
-                    if (item.optString("description").isNotBlank()) add(this,label(item.optString("description"),12f,mutedColor),top=6)
-                    if (pluginPage == 0) {
-                        val essential = item.optBoolean("essential")
-                        val enabled = item.optBoolean("enabled")
-                        statusRow(this, if (item.optBoolean("internal")) "Integriert" else "Extern",
-                            if (item.optBoolean("failed")) "Fehler" else if (enabled) "Aktiviert" else "Deaktiviert",
-                            if (item.optBoolean("failed")) errorColor else if (enabled) mintColor else mutedColor)
-                        if (item.optString("pending").isNotBlank()) add(this,label("Update bereit – Neustart erforderlich",11f,warmColor))
-                        if (!essential) add(this,operationButton(if(enabled)"Deaktivieren" else "Aktivieren",if(enabled)"disable" else "enable",JSONObject().put("id",id)),top=6)
-                        if (!essential && !item.optBoolean("internal")) add(this,button("Deinstallieren", destructive=true) {
-                            AlertDialog.Builder(this@ValancedXActivity).setTitle("Plugin deinstallieren?")
-                                .setMessage("Auch lokale Daten dieses Plugins werden gelöscht.")
-                                .setNegativeButton("Abbrechen",null).setPositiveButton("Deinstallieren") { _, _ -> pluginAction("uninstall",JSONObject().put("id",id)) }.show()
-                        },top=6)
-                    } else {
-                        val repo = item.optString("repo")
-                        add(this,label(Uri.parse(repo).host ?: repo,11f,mutedColor),top=5)
-                        val install = button("Installieren", true) {
-                            pluginAction("install_direct", JSONObject().put("id",id).put("repo",repo))
-                        }
-                        install.maxLines = 1
-                        install.ellipsize = android.text.TextUtils.TruncateAt.END
-                        add(this, install, top = 8)
-                        val progress = ProgressBar(this@ValancedXActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
-                            max = 100
-                            visibility = View.INVISIBLE
-                            progressTintList = ColorStateList.valueOf(accentColor)
-                            indeterminateTintList = ColorStateList.valueOf(accentColor)
-                        }
-                        addView(progress, LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(3) })
-                        discoveryControls[pluginKey(id,repo)] = DiscoveryControl(install,progress)
+            }.show()
+        },LinearLayout.LayoutParams(dp(48),-2))
+        add(parent,tools,top=6)
+        disconnectNotice(parent)
+        val search=EditText(this).apply{
+            hint="Plugins suchen …";setText(pluginQuery);setTextColor(whiteColor);setHintTextColor(mutedColor);setSingleLine(true)
+            setPadding(dp(14),dp(10),dp(14),dp(10));background=rounded(surfaceColor,borderColor,14)
+        }
+        add(parent,search,top=8)
+        val list=column();add(parent,list,top=4)
+        fun showEntries(){
+            list.removeAllViews();discoveryControls.clear()
+            val includeVencord=vencordEnabled()
+            val visibleInstalled=installed.filter{item->
+                val id=item.optString("id");val aliases=installedBinding(item);val active=item.optBoolean("enabled")
+                if(PluginCatalogView.systemEntry(item)&&!showSystemPlugins)return@filter false
+                if(id.startsWith("veyra.legacy."))return@filter false
+                if(id.startsWith("veyra.port.")&&aliases.isEmpty())return@filter false
+                if(id.startsWith("veyra.vencord.generated.")&&!includeVencord&&!active)return@filter false
+                if(id.startsWith("veyra.port.")&&!includeVencord&&!active)return@filter false
+                if(pluginFilter==1&&!active)return@filter false
+                if(pluginFilter==2&&aliases.isEmpty())return@filter false
+                PluginCatalogView.matches(item,aliases,pluginQuery)
+            }
+            val groups=if(pluginPage==0)PluginCatalogView.group(visibleInstalled) else {
+                val external=PluginCatalogView.group(available).filter{group->
+                    group.entries.any{item->
+                        val aliases=availableBinding(item)
+                        (pluginFilter!=2||aliases.isNotEmpty())&&PluginCatalogView.matches(item,aliases,pluginQuery)
                     }
-                    analysisEntry(this,item,if(pluginPage==0)"installed" else "catalog")
+                }.flatMap{group->group.entries}
+                val builtins=if(includeVencord&&pluginFilter==2)integrated.filter{PluginCatalogView.matches(it,installedBinding(it),pluginQuery)}else emptyList()
+                PluginCatalogView.group(external+builtins)
+            }.sortedBy{group->group.entries.first().optString("name").lowercase(Locale.ROOT)}
+            eyebrow(list,groups.size.toString()+" PLUGINS"+if(pluginPage==1&&pluginFilter==0)" · "+available.size+" QUELL-EINTRÄGE" else "")
+            if(groups.isEmpty())add(list,label("Keine passenden Plugins. Quellen und Integration prüfen.",12f,mutedColor),top=8)
+            for(group in groups.take(pluginLimit)){
+                val variants=group.entries
+                val item=variants.firstOrNull{availableBinding(it).isNotEmpty()}?:variants.first()
+                val id=group.id
+                val isInstalled=pluginPage==0||item.optBoolean("internal")
+                val aliases=if(isInstalled)installedBinding(item)else availableBinding(item)
+                val showAlias=aliases.isNotEmpty()&&(includeVencord||item.optBoolean("enabled"))
+                val active=item.optBoolean("enabled")
+                card(list,top=6){
+                    tag="vx-plugin-"+id+"|"+item.optString("repo")
+                    val row=LinearLayout(this@ValancedXActivity).apply{gravity=Gravity.CENTER_VERTICAL}
+                    val text=column()
+                    val name=item.optString("name",id).removePrefix("Vencord · ")
+                    add(text,label(name,15f,whiteColor,true).apply{maxLines=2})
+                    val meta=if(showAlias)"Vencord · "+aliases.joinToString(" / "){it.title}
+                        else "v"+item.optString("version")+" · "+item.optString("author").substringBefore(" <").substringBefore(" (").trim()
+                    add(text,label(meta,10f,if(showAlias)accentColor else mutedColor).apply{maxLines=2},top=3)
+                    val status=when{
+                        item.optBoolean("failed")->"Fehler"
+                        isInstalled&&active&&aliases.any{it.rule.kind=="compiled"}->runtimeLabel(item)
+                        isInstalled&&active->"Aktiv"
+                        isInstalled->if(showAlias)"Mobile-Port bereit" else "Deaktiviert"
+                        item.optBoolean("installed")->"Installiert"
+                        showAlias->"Android-Gegenstück"
+                        variants.size>1->variants.size.toString()+" Quellen"
+                        else->Uri.parse(item.optString("repo")).host.orEmpty()
+                    }
+                    add(text,label(status,11f,if(item.optBoolean("failed"))errorColor else if(active)mintColor else mutedColor).apply{maxLines=2},top=4)
+                    row.addView(text,LinearLayout.LayoutParams(0,-2,1f))
+                    if(isInstalled){
+                        if(!item.optBoolean("essential"))row.addView(Switch(this@ValancedXActivity).apply{
+                            isChecked=active;applySwitchPalette(this);isEnabled=pluginJob==null&&analysisJob?.isActive!=true
+                            contentDescription=name+" aktivieren"
+                            setOnClickListener{
+                                val checked=isChecked
+                                isChecked=active
+                                if(checked&&includeVencord&&aliases.isNotEmpty())activateTranslated(aliases.first())
+                                else pluginAction(if(checked)"enable" else "disable",JSONObject().put("id",id))
+                                isEnabled=pluginJob==null&&analysisJob?.isActive!=true
+                            }
+                        })
+                    }else{
+                        val install=button(if(variants.size>1)"Quellen" else if(includeVencord&&aliases.isNotEmpty())"Aktivieren" else "Installieren",true){
+                            if(variants.size>1)choosePluginSource(variants)
+                            else if(includeVencord&&aliases.isNotEmpty())activateTranslated(aliases.first())
+                            else pluginAction("install_direct",JSONObject().put("id",id).put("repo",item.optString("repo")))
+                        }
+                        install.setPadding(dp(9),dp(9),dp(9),dp(9));install.textSize=12f
+                        install.maxLines=1;install.ellipsize=android.text.TextUtils.TruncateAt.END
+                        row.addView(install,LinearLayout.LayoutParams(-2,-2))
+                        if(variants.size==1&&(!includeVencord||aliases.isEmpty())){
+                            val progress=ProgressBar(this@ValancedXActivity,null,android.R.attr.progressBarStyleHorizontal).apply{
+                                max=100;visibility=View.GONE;progressTintList=ColorStateList.valueOf(accentColor);indeterminateTintList=ColorStateList.valueOf(accentColor)
+                            }
+                            discoveryControls[pluginKey(id,item.optString("repo"))]=DiscoveryControl(install,progress)
+                            add(this,row)
+                            addView(progress,LinearLayout.LayoutParams(-1,dp(3)))
+                        }
+                    }
+                    row.addView(label("⋮",23f,mutedColor,true).apply{
+                        gravity=Gravity.CENTER;contentDescription=name+" Optionen";setOnClickListener{pluginDetails(item,if(isInstalled)"installed" else "catalog",aliases,variants)}
+                    },LinearLayout.LayoutParams(dp(31),dp(44)))
+                    if(row.parent==null)add(this,row)
+                    if(item.optString("pending").isNotBlank())add(this,label("Update bereit · Neustart nötig",10f,warmColor),top=4)
                 }
             }
+            if(groups.size>pluginLimit)add(list,button("Weitere anzeigen ("+(groups.size-pluginLimit)+")"){pluginLimit+=36;showEntries()},top=8)
             updateDiscoveryControls()
         }
         showEntries()
-        search.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                pluginQuery = s?.toString().orEmpty()
-                showEntries()
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {}
+        search.addTextChangedListener(object:android.text.TextWatcher{
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){pluginQuery=s?.toString().orEmpty();pluginLimit=36;showEntries()}
+            override fun afterTextChanged(s:android.text.Editable?){}
         })
     }
-
 
     private fun render(preserveScroll: Boolean = false) {
         val previousY = if (preserveScroll) scrollView?.scrollY ?: restoredScrollY else 0
@@ -1916,6 +2072,7 @@ class ValancedXActivity : Activity() {
         header.addView(headerIcon("refresh","Aktualisieren") {
             connectionGranted=grantConnection()
             if(currentTab==3&&themePage==0&&pluginJob==null) pluginAction("theme_snapshot")
+            else if(currentTab==1&&pluginJob==null)pluginAction("snapshot")
             else if(currentTab==2&&pluginJob==null) pluginAction(if(pluginPage==0) "snapshot" else "refresh")
             else render(preserveScroll=true)
         },LinearLayout.LayoutParams(dp(40),dp(42)))
@@ -1962,7 +2119,7 @@ class ValancedXActivity : Activity() {
                     gravity = Gravity.CENTER
                 }, top = 2)
                 setOnClickListener {
-                    if (currentTab != index) { currentTab = index; render(); if (index == 2 && pluginData == null && pluginJob == null) pluginAction("snapshot"); if(index==3&&themePage==0&&discordThemeState==null&&pluginJob==null)pluginAction("theme_snapshot") }
+                    if (currentTab != index) { currentTab = index; render(); if ((index == 2||index==1) && pluginData == null && pluginJob == null) pluginAction("snapshot"); if(index==3&&themePage==0&&discordThemeState==null&&pluginJob==null)pluginAction("theme_snapshot") }
                 }
             }
             navigation.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))

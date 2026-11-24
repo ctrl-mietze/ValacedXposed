@@ -142,5 +142,47 @@
     "target": "bleelblep.multi-scrobbler",
     "adaptation": "Mobile Musikstatus-Integration.",
     "limitation": "Eigene Anbieter- und Music-Bridge-Konfiguration nötig."
+  },
+  {
+    "id": "customIdle",
+    "target": "k1ngop.no-idle",
+    "adaptation": "Mobile IDLE-Event anstelle von Desktop-Idle-Timern.",
+    "limitation": "Nur Auto-Idle deaktivieren; frei einstellbare Leerlaufzeit ist nicht umgesetzt."
+  },
+  {
+    "id": "fakeProfileThemes",
+    "target": "hakuxyz.fake-profile-themes",
+    "adaptation": "Mobile Darstellung der bereits im Profil enthaltenen 3y3-Farben.",
+    "limitation": "Lesen und Darstellen; kein Desktop-Profil-Editor oder Premium-Zugriff."
+  },
+  {
+    "id": "expressionManager",
+    "target": "dev.kmmiio99o.expression-utils",
+    "adaptation": "Mobile Emoji- und Sticker-Aktionsmenüs.",
+    "limitation": "Nur vorhandene Berechtigungen für das Verwalten von Expressions; kein vollständiger Desktop-Editor."
+  },
+  {
+    "id": "fullSearchContext",
+    "target": "dev.tralwdwdd.search-action-sheet",
+    "adaptation": "Long-Press-Menü für mobile Suchergebnisse.",
+    "limitation": "Mobile Menüstruktur statt Desktop-Kontextmenü."
+  },
+  {
+    "id": "typingTweaks",
+    "target": "palmdevs.better-typing-indicators",
+    "adaptation": "Mobile Typing-Avatare und Darstellungsoptionen.",
+    "limitation": "Gemeinsamer Port mit TypingIndicator; keine zweite Installation."
+  },
+  {
+    "id": "validUser",
+    "target": "k1ngop.valid-user",
+    "adaptation": "Mobile Auflösung unbekannter Mentions.",
+    "limitation": "Tippen statt Hover; nur vorhandene Client-Daten und reguläre Auflösung."
+  },
+  {
+    "id": "viewIcons",
+    "target": "dxckie.picture-links",
+    "adaptation": "Mobile Profilbilder, Banner und Server-Icons öffnen.",
+    "limitation": "Touch-Menü statt Desktop-Hover; Dekorations- und Formatoptionen können abweichen."
   }
 ]

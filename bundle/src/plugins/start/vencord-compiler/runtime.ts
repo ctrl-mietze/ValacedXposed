@@ -4,6 +4,7 @@ import { before } from '@valenced/patcher'
 import type { PluginOptions } from '@valenced/plugins/types'
 import { createMessageOptions } from './message-runtime'
 import { createContextOptions } from './context-runtime'
+import { createExtraOptions } from './extra-runtime'
 import { observeMessageActions, bindMessageText } from './message-adapter'
 import { publishCompilerState } from './runtime-status'
 import { normalizeCodeFences, normalizeRenderedRows, type Program } from './operations'
@@ -13,6 +14,7 @@ import { normalizeCodeFences, normalizeRenderedRows, type Program } from './oper
 export function createCompiledOptions(program:Program):PluginOptions{
     if(program.op==='message.replace'||program.op==='message.timestamp'||program.op==='message.silent')return createMessageOptions(program)
     if(program.op==='menu.userUrl'||program.op==='menu.emojiMarkdown'||program.op==='reply.mentionPolicy')return createContextOptions(program)
+    if(program.op==='input.gifPaste'||program.op==='menu.quickMention'||program.op==='menu.voiceFile'||program.op==='menu.imageFilename'||program.op==='menu.copyTextFile'||program.op==='menu.reverseImage'||program.op==='menu.originalImage'||program.op==='menu.rawSelection'||program.op==='menu.serverInfo'||program.op==='menu.latency'||program.op==='rows.replyTimestamp'||program.op==='rows.gifAlt'||program.op==='rows.ircColors')return createExtraOptions(program)
     return {
         start({cleanup,plugin}){
             const expected=new Set<string>()

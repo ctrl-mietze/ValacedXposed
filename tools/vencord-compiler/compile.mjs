@@ -273,6 +273,104 @@ function contextTransform(entry){
    }
  }
 }
+
+/** Mobile backend lowering for input insertion, selected-object actions and
+ * immutable renderer operations. AST anchors and function structure must
+ * agree before an IR is emitted; no desktop source is executed in Android. */
+function extendedTransform(entry){
+ const {sf,o}=entry;
+ const text=n=>n?.getText(sf)??'';
+ const patches=value(o,'patches');
+ const patchText=text(patches);
+ const method=k=>{const n=prop(o,k);return n&&ts.isMethodDeclaration(n)?n:undefined};
+ const functionOf=k=>sf.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text===k);
+ const menu=value(o,'contextMenus');
+ const hasMenu=k=>menu&&ts.isObjectLiteralExpression(menu)&&!!prop(menu,k);
+ const defaults=new Map();
+ walk(sf,n=>{
+  if(ts.isCallExpression(n)&&text(n.expression)==='definePluginSettings'&&ts.isObjectLiteralExpression(n.arguments[0])){
+   for(const property of n.arguments[0].properties){
+    const k=key(property),v=property.initializer;
+    if(!k||!v||!ts.isObjectLiteralExpression(v))continue;
+    const d=value(v,'default');
+    if(d?.kind===ts.SyntaxKind.TrueKeyword||d?.kind===ts.SyntaxKind.FalseKeyword)defaults.set(k,d.kind===ts.SyntaxKind.TrueKeyword);
+    else if(d&&ts.isNumericLiteral(d))defaults.set(k,Number(d.text));
+    else if(string(d)!==undefined)defaults.set(k,string(d));
+   }
+  }
+ });
+ const hasCall=(node,callee,predicate=()=>true)=>{
+  let found=false;
+  if(node)walk(node,n=>{if(ts.isCallExpression(n)&&text(n.expression)===callee&&predicate(n))found=true});
+  return found;
+ };
+ const handle=method('handleSelect');
+ if(handle&&patchText.includes('handleSelectGIF=')&&patchText.includes('$self.handleSelect')&&
+  hasCall(handle,'insertTextIntoChatInputBox',n=>n.arguments.length===1&&ts.isBinaryExpression(n.arguments[0])&&text(n.arguments[0].left)==='gif.url'&&string(n.arguments[0].right)===' ')&&
+  hasCall(handle,'ExpressionPickerStore.closeExpressionPicker'))
+   return {op:'input.gifPaste',location:'gif_reply'};
+ const popover=value(o,'messagePopoverButton');
+ if(popover&&ts.isObjectLiteralExpression(popover)){
+  const render=prop(popover,'render');
+  if(render&&ts.isMethodDeclaration(render)&&
+   hasCall(render,'insertTextIntoChatInputBox',n=>{
+    const v=n.arguments[0];return v&&ts.isTemplateExpression(v)&&v.head.text==='<@'&&v.templateSpans.length===1&&text(v.templateSpans[0].expression)==='msg.author.id'&&v.templateSpans[0].literal.text==='> ';
+   })&&hasCall(render,'PermissionStore.can'))
+    return {op:'menu.quickMention',label:'Nutzer erwähnen'};
+ }
+ const voice=method('renderDownload');
+ if(voice&&patchText.includes('VOICE_MESSAGES_PLAYBACK_RATE_LABEL')&&patchText.includes('$self.renderDownload')&&
+  text(voice).includes('href={src}')&&text(voice).includes('voice-message.ogg'))
+   return {op:'menu.voiceFile',label:'Sprachdatei öffnen'};
+ const image=method('getTitle');
+ if(image&&patchText.includes('data-safe-src')&&patchText.includes('$self.getTitle')&&text(image).includes('ImageExtensionRe.test')&&text(image).includes('url.pathname.split')&&typeof defaults.get('showFullUrl')==='boolean')
+   return {op:'menu.imageFilename',label:'Bilddateinamen',fullUrlDefault:defaults.get('showFullUrl')};
+
+ const copy=prop(o,'addCopyButton');
+ if(copy&&patchText.includes('PREVIEW_BYTES_LEFT')&&text(copy).includes('bytesLeft <= 0')&&
+    hasCall(copy,'copyWithToast',n=>text(n.arguments[0])==='fileContents'))
+   return {op:'menu.copyTextFile',label:'Textdatei kopieren',maxBytes:65536};
+ const quality=method('getSrc');
+ if(quality&&patchText.includes('.handleImageLoad)')&&text(quality).includes('contentType?.startsWith("image/")')&&
+    text(quality).includes('url.hostname = "cdn.discordapp.com"')&&text(quality).includes('url.pathname.startsWith("/attachments/")'))
+   return {op:'menu.originalImage',label:'Originalbild öffnen'};
+ const search=functionOf('search');
+ if(hasMenu('image-context')&&hasMenu('message')&&search&&text(search).includes('open(engine + encodeURIComponent(src)')){
+   let engines=[];
+   for(const statement of sf.statements)if(ts.isVariableStatement(statement))for(const d of statement.declarationList.declarations){
+     if(!ts.isIdentifier(d.name)||d.name.text!=='Engines')continue;
+     let init=d.initializer;
+     if(init&&ts.isAsExpression(init))init=init.expression;
+     if(init&&ts.isObjectLiteralExpression(init))engines=init.properties.map(n=>({name:key(n),base:string(n.initializer)}))
+       .filter(e=>['https://lens.google.com/uploadbyurl?url=','https://www.bing.com/images/search?view=detailv2&iss=sbi&q=imgurl:'].includes(e.base));
+   }
+   if(engines.length)return {op:'menu.reverseImage',label:'Bildersuche',engines};
+ }
+ const raw=functionOf('cleanMessage'),redact=functionOf('redactUser');
+ if(raw&&redact&&hasMenu('message')&&hasMenu('guild-context')&&hasMenu('channel-context')&&
+   text(raw).includes('redactUser(msg.author)')&&text(redact).includes('stripSensitiveData')&&text(redact).includes('"email"')&&text(redact).includes('"phone"'))
+   return {op:'menu.rawSelection',label:'Ausgewählte Daten anzeigen'};
+ if(hasMenu('guild-context')&&hasMenu('guild-header-popout')&&text(menu).includes('makePatch(false)')&&
+    text(sf).includes('openGuildInfoModal(guild)')&&text(sf).includes('vc-server-info'))
+   return {op:'menu.serverInfo',label:'Server-Info'};
+ const latency=method('latencyTooltipData');
+ if(latency&&patchText.includes('showCommunicationDisabledStyles')&&typeof defaults.get('latency')==='number'&&
+    hasCall(latency,'SnowflakeUtils.extractTimestamp',n=>text(n.arguments[0])==='id')&&
+    hasCall(latency,'SnowflakeUtils.extractTimestamp',n=>text(n.arguments[0])==='nonce'))
+   return {op:'menu.latency',label:'Nachrichten-Zeitdifferenz',threshold:Math.max(0,Math.min(60,defaults.get('latency')))};
+ const reply=functionOf('ReplyTimestamp');
+ if(reply&&patchText.includes('REPLY_QUOTE_MESSAGE_NOT_LOADED')&&patchText.includes('$self.ReplyTimestamp')&&
+    text(reply).includes('referencedMessage.message.timestamp')&&hasCall(reply,'DateUtils.isSameDay'))
+   return {op:'rows.replyTimestamp'};
+ const alt=method('altify');
+ if(alt&&patchText.includes('$self.altify')&&text(alt).includes('props.alt')&&text(alt).includes('props.original || props.src')&&
+    text(alt).includes('image/gif')&&hasCall(alt,'decodeURI'))
+   return {op:'rows.gifAlt'};
+ const color=functionOf('calculateNameColorForUser');
+ if(color&&method('wrapMessageColorProps')&&method('calculateNameColorForMessageContext')&&patchText.includes('$self.wrapMessageColorProps')&&
+    text(color).includes('hsl(')&&text(color).includes('h64(id + seed)')&&typeof defaults.get('lightness')==='number'&&typeof defaults.get('saturation')==='number')
+   return {op:'rows.ircColors',lightness:defaults.get('lightness'),saturation:defaults.get('saturation'),seed:defaults.get('seed')??'',onlyUncolored:defaults.get('applyColorOnlyToUsersWithoutColor')===true,onlyDMs:defaults.get('applyColorOnlyInDms')===true};
+}
 const existing={
  silentTyping:['veyra.port.no-typing','Flux: lokale Tippanzeige','Keine Desktop-Schaltfläche.'],
  characterCounter:['veyra.port.char-counter','Metro ChatInputCharCounter + React Native','Mobile Darstellung; Neustart eventuell nötig.'],
@@ -311,7 +409,7 @@ for(const [id,list] of groups){
  const row={id,name:entry.name,description:entry.description,path:entry.f,sha256:fileInfo.get(entry.f).sha256,size:fileInfo.get(entry.f).size,
    files:list.length,sourceFiles:info.files,treeHash:info.treeHash,native:info.features.includes('Node/Electron')||info.features.includes('Desktop-Native')||list.some(f=>f.endsWith('/native.ts')),
    css:info.features.includes('CSS'),patches:info.patchCount>0,analysis:{...info,files:undefined}};
- const program=lifecycleSetter(entry)??codeblockTransform(entry)??messageTransform(entry)??contextTransform(entry);
+ const program=lifecycleSetter(entry)??codeblockTransform(entry)??messageTransform(entry)??contextTransform(entry)??extendedTransform(entry);
  let rule;
  if(program){
   const target=writeGenerated(entry,program);
@@ -323,7 +421,20 @@ for(const [id,list] of groups){
    'message.silent':['AST-Send-Listener → Mobile Send-Hook, Chat-Aktionsbutton und Einstellungen.','Manuell aktivierter Modus; kein automatisches Senden. Mobile Modulbindung erforderlich.'],
    'menu.userUrl':['AST-Clipboard-Aktion → mobile Profil-ActionSheet-Zeile.','Nur ausgewählte Profile; tatsächlicher Menü-Render wird separat bestätigt.'],
    'menu.emojiMarkdown':['AST-Emoji-Template → mobile Emoji-ActionSheet-Zeile.','Custom-Emojis mit ID und Name; kein DOM- oder Unicode-Picker-Ersatz.'],
-   'reply.mentionPolicy':['AST-Reply-Regel → CREATE_PENDING_REPLY und lokale Nutzer-/Rollenlisten.','Nur Standardverhalten beim Erstellen einer Antwort; kein Desktop-Shift-Modus.']
+   'reply.mentionPolicy':['AST-Reply-Regel → CREATE_PENDING_REPLY und lokale Nutzer-/Rollenlisten.','Nur Standardverhalten beim Erstellen einer Antwort; kein Desktop-Shift-Modus.'],
+   'input.gifPaste':['AST-GIF-Auswahl → bestehender mobiler GIF-Picker-Send-Hook und Chat-Entwurf.','Nur eindeutig erkannte GIF-Picker-Aktionen; kein automatisches Senden bei fehlendem Eingabefeld.'],
+   'menu.quickMention':['AST-Mention-Template → mobile Nachrichtenauswahl und bestehender Chat-Entwurf.','Nur bei aktivem Eingabefeld; keine automatische Nachricht.'],
+   'menu.voiceFile':['AST-Downloadaktion → native Menüaktion für vorhandene Discord-Sprachdatei.','Öffnet den vorhandenen HTTPS-Anhang im System; kein Hintergrunddownload.'],
+   'menu.imageFilename':['AST-Bildtitel → mobile Dateinamen-Aktion an ausgewählten Medien.','Dateinamen statt Hover-Tooltip; nur vorhandene Bildanhänge/Embeds.'],
+   'menu.copyTextFile':['AST-Dateivorschau → explizites mobiles Kopieren einer Textdatei.','Genau ein ausgewählter Discord-Textanhang bis 64 KiB; Download nur nach Bestätigung.'],
+   'menu.originalImage':['AST-Originalbild-Auswahl → vorhandenen Originalanhang öffnen.','Originaldatei statt hochskalierter Inline-Vorschau; keine Änderungen an signierten URLs.'],
+   'menu.reverseImage':['AST-Suchmaschinen-URLs → bestätigte Android-Bildersuche.','Nur öffentliche externe Bildlinks ohne Query; zwei Suchmaschinen, keine privaten Discord-Dateilinks.'],
+   'menu.rawSelection':['AST-Kontextaktionen → explizite Auswahl und redigierte lokale JSON-Ansicht.','Nur ausgewählte, freigegebene Metadatenfelder; keine vollständigen internen Objekte.'],
+   'menu.serverInfo':['AST-Server-Menü → lokale Server-Infokarte im Android-ActionSheet.','Nur bereits vorhandene Serverdaten; kein zusätzlicher Abruf.'],
+   'menu.latency':['AST-Snowflake-Differenz → mobile Nachrichtendetails.','Zeitdifferenz statt Desktop-Tooltip; keine Netzwerklatenz-Messung.'],
+   'rows.replyTimestamp':['AST-Reply-Zeitstempel → native RowManager-Antwortvorschau.','Zeitstempel am Namen der geladenen Antwort; kein Desktop-Layout.'],
+   'rows.gifAlt':['AST-GIF-Beschreibung → begrenzte mobile Renderdaten-Transformation.','Nur vorhandene GIF-Labels mit Dateinamen; tatsächliche Renderstruktur wird geprüft.'],
+   'rows.ircColors':['AST-Farbregeln → lokale RowManager-Namensfarben und Einstellungen.','Deterministischer mobiler Hash statt XXHash64; Chat, nicht Mitgliederliste.']
   };
   const [adaptation,limitation]=descriptions[program.op];
   rule={id,port:target,kind:'compiled',adaptation,limitation,program};
@@ -346,7 +457,11 @@ for(const [id,list] of groups){
   if(info.sharedApis.length)blockers.push('Vencord-APIs: '+info.sharedApis.join(', '));
   if(info.dependencies.length||info.pluginImports.length)blockers.push('Plugin-Abhängigkeiten: '+uniq([...info.dependencies,...info.pluginImports]).join(', '));
   if(!blockers.length)blockers.push('Noch keine geprüfte mobile Semantik/ABI');
-  row.translation={kind:'manual',reason:blockers.join(' · ')};
+  const builtIn=id==='voiceMessages';
+  const platformOnly=/\.(desktop|discordDesktop|web|browser|vesktop|dev)$/.test(id);
+  row.translation={kind:'manual',reason:blockers.join(' · '),disposition:builtIn?'android-native':platformOnly?'desktop-platform':'needs-adapter'};
+  if(builtIn)row.translation.reason='Discord Android besitzt bereits native Sprachmitteilungen; kein zusätzlicher Desktop-Port erforderlich.';
+  else if(platformOnly)row.translation.reason='Plattformgebundene Desktop/Web-Funktion ohne geprüfte Android-Entsprechung. '+row.translation.reason;
  }
  rows.push(row);
 }

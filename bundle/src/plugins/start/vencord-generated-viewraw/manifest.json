@@ -1,0 +1,17 @@
+{
+    "id": "veyra.vencord.generated.viewraw",
+    "name": "Vencord · ViewRaw",
+    "description": "Copy and view the raw content/data of any message, channel or guild (generated mobile adapter)",
+    "author": {
+        "name": "Veyra · Vencord contributors",
+        "links": [
+            {
+                "url": "https://github.com/Vendicated/Vencord/tree/ce9355e9a93e369c7295fa162ad563f7f97b1ff7/src/plugins/viewRaw",
+                "title": "Original source and license"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {}
+}

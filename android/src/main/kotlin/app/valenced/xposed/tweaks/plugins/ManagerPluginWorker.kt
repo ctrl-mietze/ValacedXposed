@@ -189,7 +189,9 @@ internal object ManagerPluginWorker {
         "veyra.port.no-typing" to setOf("palmdevs.silent-typing"),
         "veyra.port.char-counter" to setOf("thororen.character-counter"),
         "veyra.port.clean-urls" to setOf("hakuxyz.clear-urls"),
-        "veyra.port.pastelize" to setOf("dxckie.pastelize"),
+        "veyra.port.pastelize" to setOf("dxckie.pastelize","veyra.vencord.generated.irccolors"),
+        "veyra.vencord.generated.gifpaste" to setOf("dev.benjii.gtci","dev.benjii.gif-to-chat-input"),
+        "veyra.vencord.generated.irccolors" to setOf("dxckie.pastelize"),
     )
     private fun conflictingPort(id:String):String? {
         val matches=portAlternatives[id].orEmpty()+portAlternatives.filterValues{id in it}.keys
@@ -238,6 +240,7 @@ internal object ManagerPluginWorker {
                 .put("enabled", enabled).put("failed", id in pluginRegistry.discoveryFailures || id in pluginRegistry.bootErrors)
                 .put("pending", pluginRegistry.pendingUpdates[id]?.toString() ?: "")
                 .put("compilerRuntime", CompilerRuntimeState.snapshot(id))
+                .put("artifactSha256",SourcesStore[id]?.hash ?: "")
                 .put("repo", SourcesStore[id]?.repo ?: ""))
         }
         return JSONObject().put("message", message).put("legacyEnabled",legacyEnabled()).put("repos", repos)
@@ -341,6 +344,8 @@ internal object ManagerPluginWorker {
                 val id=data.getString("id")
                 val rule=VencordTranslator.rules[id]?:error("Kein Mobile-Adapter vorhanden.")
                 if(op=="vencord_activate"){
+                    val configuration=context.contentResolver.call(Uri.parse("content://"+BuildConfig.APPLICATION_ID+".settings"),"configuration",null,null)
+                    require(configuration?.getBoolean("vencord_integration",true)==true){"Vencord-Integration zuerst unter Module aktivieren."}
                     require(data.optString("sha256")==rule.sourceHash&&data.optString("treeHash")==rule.treeHash){"Vencord-Quellbaum nicht unterstützt."}
                     conflictingPort(rule.port)?.let{error("Gleichartiges Plugin aktiv: "+it+". Zuerst deaktivieren.")}
                     if(rule.kind=="repository"){

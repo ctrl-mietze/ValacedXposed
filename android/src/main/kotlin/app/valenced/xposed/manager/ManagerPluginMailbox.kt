@@ -58,7 +58,7 @@ internal object ManagerPluginMailbox {
         val job = current ?: return
         if (job.id == id && job.claimed && job.result == null) {
             job.result = if (result.length <= 350_000) result else
-                JSONObject().put("error", "Katalog zu groß. Entferne eine Quelle.").toString()
+                JSONObject().put("error", "Katalog zu groß. Bitte Katalogdarstellung aktualisieren.").toString()
             if (result.length <= 350_000 && runCatching { JSONObject(result).has("available") }.getOrDefault(false)) {
                 snapshot = result
             }

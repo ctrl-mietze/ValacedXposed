@@ -259,6 +259,66 @@
       "artifactUrl": "https://community.valenced.app/pool/dev.cocobo1.command-lib@2.0.0.zip",
       "artifactSize": 2900,
       "artifactSha256": "90bcadc76fa4e38257d688868875fd3ab3054c2857069735b2455c62c29a23f8"
+    },
+    {
+      "id": "k1ngop.no-idle",
+      "name": "No Idle",
+      "description": "Prevent status from idling when Discord is in the background.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/k1ngop.no-idle@1.0.0.zip",
+      "artifactSize": 639,
+      "artifactSha256": "db4e8f243c2dd9e1ca2f1676473364103b0b01edba5472d5b4eb3a43303be6c8"
+    },
+    {
+      "id": "hakuxyz.fake-profile-themes",
+      "name": "Fake Profile Themes",
+      "description": "Show profile colors hidden in bios with invisible 3y3 encoding.",
+      "repo": "https://hakuxyz.github.io/valenced-plugins/index.json",
+      "version": "1.2.1",
+      "artifactUrl": "https://hakuxyz.github.io/valenced-plugins/hakuxyz.fake-profile-themes@1.2.1.zip",
+      "artifactSize": 3360,
+      "artifactSha256": "4508124c89eb7014e995605ce2fda6c1aa29ff785269a7c8b86e5d36ff0f398d"
+    },
+    {
+      "id": "dev.kmmiio99o.expression-utils",
+      "name": "Expression Utils",
+      "description": "Adds useful actions to custom emoji and sticker sheets, including cloning expressions to servers you manage.",
+      "repo": "https://kmmiio99o.github.io/valenced-plugins/index.json",
+      "version": "1.0.6",
+      "artifactUrl": "https://kmmiio99o.github.io/valenced-plugins/pool/dev.kmmiio99o.expression-utils@1.0.6.zip",
+      "artifactSize": 24093,
+      "artifactSha256": "fbd81a3dd8f813c6f60256c3dcf8b7df52ad6da7b1a91beac28630d6508200e6"
+    },
+    {
+      "id": "dev.tralwdwdd.search-action-sheet",
+      "name": "Search Action Sheet",
+      "description": "Makes search results open the action sheet on long press.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/dev.tralwdwdd.search-action-sheet@1.0.0.zip",
+      "artifactSize": 1048,
+      "artifactSha256": "9ed91434e5dd9152a319bc760b29d22306587a9e463ebf0bacc997f4b4e6dc99"
+    },
+    {
+      "id": "k1ngop.valid-user",
+      "name": "ValidUser",
+      "description": "Resolves @unknown-user mentions to a normal clickable mention.",
+      "repo": "https://community.valenced.app/index.json",
+      "version": "1.0.0",
+      "artifactUrl": "https://community.valenced.app/pool/k1ngop.valid-user@1.0.0.zip",
+      "artifactSize": 1687,
+      "artifactSha256": "1a0effc927caf111bc08aa8f1063de7be632de5d8c61951d5029bebea3e349c3"
+    },
+    {
+      "id": "dxckie.picture-links",
+      "name": "Picture Links+",
+      "description": "Tap profile pictures, profile banners, and server icons and banners to view them full size.",
+      "repo": "https://dxckie-cell.github.io/valenced-plugins/index.json",
+      "version": "1.0.12",
+      "artifactUrl": "https://dxckie-cell.github.io/valenced-plugins/pool/dxckie.picture-links@1.0.12.zip",
+      "artifactSize": 4360,
+      "artifactSha256": "8c88d0f9b5abb8d98557b98518b738a1c56c61a9c0b8a164336cba65eab06746"
     }
   ]
 }

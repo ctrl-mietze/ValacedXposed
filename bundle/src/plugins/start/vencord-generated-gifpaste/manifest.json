@@ -1,0 +1,17 @@
+{
+    "id": "veyra.vencord.generated.gifpaste",
+    "name": "Vencord · GifPaste",
+    "description": "Makes picking a gif in the gif picker insert a link into the chatbox instead of instantly sending it (generated mobile adapter)",
+    "author": {
+        "name": "Veyra · Vencord contributors",
+        "links": [
+            {
+                "url": "https://github.com/Vendicated/Vencord/tree/ce9355e9a93e369c7295fa162ad563f7f97b1ff7/src/plugins/gifPaste",
+                "title": "Original source and license"
+            }
+        ]
+    },
+    "icon": "PuzzlePieceIcon",
+    "enabledByDefault": false,
+    "dependencies": {}
+}

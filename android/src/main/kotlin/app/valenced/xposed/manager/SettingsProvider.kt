@@ -60,6 +60,7 @@ class SettingsProvider : ContentProvider() {
                 putBoolean("hook_enabled", prefs.getBoolean("hook_enabled", true))
                 putBoolean("javascript_enabled", prefs.getBoolean("javascript_enabled", true))
                 putBoolean("safe_mode", prefs.getBoolean("safe_mode", false))
+                putBoolean("vencord_integration",prefs.getBoolean("vencord_integration",true))
             }
             "report" -> {
                 if (!isDiscord) throw SecurityException("Only Discord can publish module status")
