@@ -23,7 +23,7 @@ internal suspend fun refreshRepo(url: String): RepoIndex {
     )
 
     val result = PluginHttps.fetch(
-        url = url.trimEnd('/'),
+        raw = url.trimEnd('/'),
         etag = RepoStore.cachedETag(url),
         timeoutMillis = REFRESH_TIMEOUT, maxBytes = 2_000_000L,
     )
