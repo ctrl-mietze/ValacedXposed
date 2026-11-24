@@ -9,6 +9,9 @@ import app.valenced.xposed.tweaks.plugins.ManagerPluginWorker
 import app.valenced.xposed.tweaks.plugins.ManagerThemeRequests
 import app.valenced.xposed.tweaks.plugins.CompilerRuntimeState
 import java.io.File
+import android.net.Uri
+import app.valenced.plugins.PluginStatesStore
+import app.valenced.xposed.BuildConfig
 
 /**
  * `valenced.fs.*` + `valenced.app.*` bridge methods.
@@ -49,6 +52,21 @@ val additionalBridgeMethods by tweak {
     }
 
     withAppContext { ctx ->
+        val managerUri=Uri.parse("content://"+BuildConfig.APPLICATION_ID+".settings")
+        registerNativeMethod("vexcord.audio.route") {
+            StereoCallStatus.get(ctx)
+        }
+        registerNativeMethod("vexcord.bitchord.session") {
+            if(!PluginStatesStore.active.isPluginEnabled("vexcord.bitchord-presence"))
+                "{\"status\":\"disabled\"}"
+            else runCatching{
+                ctx.contentResolver.call(managerUri,"bitchord_session",null,null)?.getString("session")
+            }.getOrNull()?:"{\"status\":\"unavailable\"}"
+        }
+        registerNativeMethod("vexcord.bitchord.stop") {
+            runCatching{ctx.contentResolver.call(managerUri,"bitchord_stop",null,null)}
+            null
+        }
         registerNativeMethod("valenced.fs.getConstants") {
             mapOf(
                 "data" to ctx.dataDir.absolutePath,

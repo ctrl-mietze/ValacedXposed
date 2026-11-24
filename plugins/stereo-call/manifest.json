@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "id": "vexcord.stereo-call",
+  "name": "Stereo Call",
+  "description": "Route-aware Bluetooth stereo priority for Discord voice. Retains normal routing on wired, USB and LE Audio devices; restores the original request when necessary.",
+  "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
+  "icon": "voice_bar_bluetooth",
+  "version": "1.0.0",
+  "dependencies": {
+    "valenced.api": {
+      "version": ">=1 <2"
+    },
+    "discord": {
+      "version": "*"
+    }
+  },
+  "dist": {
+    "script": "index.js"
+  }
+}

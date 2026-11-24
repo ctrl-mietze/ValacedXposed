@@ -4,6 +4,7 @@ The repository hub keeps existing source records and their enabled states. These
 
 | Source | Index |
 | --- | --- |
+| Vexcord Plugins | [Index](https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/index.json) |
 | Valenced Community | [Index](https://community.valenced.app/index.json) |
 | dxckie-cell | [Index](https://dxckie-cell.github.io/valenced-plugins/index.json) |
 | ndb1995 | [Index](https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json) |

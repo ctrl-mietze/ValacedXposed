@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "id": "vexcord.bitchord-presence",
+  "name": "BitChord Presence",
+  "description": "Shows BitChord playback as a listening activity with title, artist, album, optional public cover, time progress and track link.",
+  "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
+  "icon": "MusicNoteIcon",
+  "version": "1.0.0",
+  "dependencies": {
+    "valenced.api": {
+      "version": ">=1 <2"
+    },
+    "discord": {
+      "version": "*"
+    }
+  },
+  "dist": {
+    "script": "index.js"
+  }
+}

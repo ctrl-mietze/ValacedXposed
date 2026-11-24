@@ -56,6 +56,20 @@ class SettingsProvider : ContentProvider() {
                 ManagerPluginMailbox.finish(extras?.getString("id").orEmpty(), extras?.getString("result").orEmpty())
                 Bundle.EMPTY
             }
+            "bitchord_session" -> {
+                if(!isDiscord)throw SecurityException("Only Discord can request BitChord presence")
+                if(prefs.getBoolean("safe_mode",false)||!prefs.getBoolean("hook_enabled",true)||!prefs.getBoolean("javascript_enabled",true)){
+                    BitChordSession.stop()
+                    Bundle().apply{putString("session","{\"status\":\"disabled\"}")}
+                }else{
+                    Bundle().apply{putString("session",BitChordSession.read(ctx))}
+                }
+            }
+            "bitchord_stop" -> {
+                if(!isDiscord)throw SecurityException("Only Discord can stop BitChord presence")
+                BitChordSession.stop()
+                Bundle.EMPTY
+            }
             "configuration" -> Bundle().apply {
                 putBoolean("hook_enabled", prefs.getBoolean("hook_enabled", true))
                 putBoolean("javascript_enabled", prefs.getBoolean("javascript_enabled", true))

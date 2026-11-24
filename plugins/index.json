@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "name": "Vexcord Plugins",
+  "description": "First-party Vexcord extensions · audio, playback and more.",
+  "plugins": {
+    "vexcord.bitchord-presence": {
+      "name": "BitChord Presence",
+      "description": "Shows BitChord playback as a listening activity with title, artist, album, optional public cover, time progress and track link.",
+      "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
+      "icon": "MusicNoteIcon",
+      "channels": {
+        "latest": "1.0.0"
+      },
+      "versions": {
+        "1.0.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.bitchord-presence@1.0.0.zip",
+          "sha256": "12549631a36098ce7d92d5c1ba86492576cfbdc53bf390eb78543dcc180f9d87",
+          "size": 4308,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        }
+      }
+    },
+    "vexcord.stereo-call": {
+      "name": "Stereo Call",
+      "description": "Route-aware Bluetooth stereo priority for Discord voice. Retains normal routing on wired, USB and LE Audio devices; restores the original request when necessary.",
+      "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
+      "icon": "voice_bar_bluetooth",
+      "channels": {
+        "latest": "1.0.0"
+      },
+      "versions": {
+        "1.0.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.stereo-call@1.0.0.zip",
+          "sha256": "774650689247d44242953496d5656982b72ccae9b23342c301f0a4857fee0396",
+          "size": 2612,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.29 — First-party plugins
+
+- Vexcord repository catalog, versioned plugin archives and SHA-256 index.
+- Stereo Call with route-aware Bluetooth A2DP preference, cleanup and normal routing fallback.
+- BitChord Presence: dedicated media-browser bridge, listening activity, optional cover, timestamps and song link.
+- Existing sources, installed plugins, compatibility IDs, and themes remain unchanged.
+
 ## 1.0.28 — Classic Motion
 
 - Restores the original moving translucent circles from ValancedX 1.0.18 for all thirteen Motion themes, in addition to the existing image and ambient layers.

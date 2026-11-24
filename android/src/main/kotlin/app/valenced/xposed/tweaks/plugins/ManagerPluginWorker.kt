@@ -186,6 +186,7 @@ internal object ManagerPluginWorker {
         check(legacyEnabled()) {"Revenge-Kompatibilitätsmodus zuerst aktivieren."}
     }
     private val portAlternatives=mapOf(
+        "vexcord.stereo-call" to setOf("mxtiy.audiofix"),
         "veyra.port.no-typing" to setOf("palmdevs.silent-typing"),
         "veyra.port.char-counter" to setOf("thororen.character-counter"),
         "veyra.port.clean-urls" to setOf("hakuxyz.clear-urls"),
@@ -337,6 +338,16 @@ internal object ManagerPluginWorker {
                 runCatching { refreshTracked(official) }
             }
         }
+        // Add our first-party catalog once, preserving all existing source
+        // records, ordering, enabled flags and any later explicit removal.
+        if(!defaults.getBoolean("vexcord_catalog_seeded",false)){
+            val official="https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/index.json"
+            if(RepoStore.list().none{it.url==official})RepoStore.set(RepoStore.list()+UserRepo(official))
+            defaults.edit().putBoolean("vexcord_catalog_seeded",true).apply()
+            if(RepoStore.list().any{it.url==official&&it.enabled}&&RepoStore.cachedIndex(official)==null){
+                runCatching{refreshTracked(official)}
+            }
+        }
         when (op) {
             "analysis_prepare" -> return JSONObject().put("analysisInput",AnalysisExport.prepare(context.applicationInfo.dataDir,data.getString("id")))
             "analysis_chunk" -> return JSONObject().put("analysisChunk",AnalysisExport.chunk(data.getString("token"),data.getInt("offset")))
@@ -433,7 +444,7 @@ internal object ManagerPluginWorker {
                 val url = validateUrl(data.getString("url"))
                 val list = RepoStore.list()
                 if (list.none { it.url == url }) {
-                    require(list.size < 12) { "Maximal 12 Quellen." }
+                    require(list.size < 24) { "Maximal 24 Quellen." }
                     RepoStore.set(list + UserRepo(url))
                 }
                 val note = runCatching { refreshTracked(url); "Quelle hinzugefügt." }

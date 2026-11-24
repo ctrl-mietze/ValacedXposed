@@ -1218,6 +1218,7 @@ class ValancedXActivity : Activity() {
         }
         eyebrow(parent,"WEITERE KATALOGE")
         val suggested=listOf(
+            Triple("Vexcord Plugins","https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/index.json","Eigene Vexcord-Plugins"),
             Triple("Valenced Community","https://community.valenced.app/index.json","Offizieller Katalog"),
             Triple("dxckie-cell","https://dxckie-cell.github.io/valenced-plugins/index.json","Community"),
             Triple("ndb1995","https://raw.githubusercontent.com/ndb1995/valenced-plugins/main/index.json","Community"),

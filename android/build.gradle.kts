@@ -17,8 +17,8 @@ android {
         applicationId = "ctrl.mietze.valacedxposed"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 10028
-        versionName = "1.0.28"
+        versionCode = 10029
+        versionName = "1.0.29"
     }
 
     sourceSets {
