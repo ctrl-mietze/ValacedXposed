@@ -55,11 +55,11 @@
     },
     "vexcord.stereo-call": {
       "name": "Stereo Call",
-      "description": "Discord call lifecycle, LE/A2DP audio routing, optional native trial and independent media app routing with live verification. Vexcord 1.0.33+.",
+      "description": "Safe lifecycle, explicit standard routing, context crash protection (Vexcord 1.0.35+), LE/A2DP and independent media controls.",
       "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
       "icon": "voice_bar_bluetooth",
       "channels": {
-        "latest": "1.3.0"
+        "latest": "1.4.0"
       },
       "versions": {
         "1.0.0": {
@@ -105,6 +105,19 @@
           "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.stereo-call@1.3.0.zip",
           "sha256": "a090b97ff60bea4f63a15131f7e24959f0302785c33c476e3b931b687e228636",
           "size": 2981,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        },
+        "1.4.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.stereo-call@1.4.0.zip",
+          "sha256": "54f5b7c0748a730841fffe90410e7124dfca510fb5a8460485fbe2ead352ccd2",
+          "size": 3153,
           "dependencies": {
             "valenced.api": {
               "version": ">=1 <2"

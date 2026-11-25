@@ -2,6 +2,7 @@ package app.valenced.xposed
 
 import android.app.Activity
 import android.app.Application
+import app.valenced.xposed.tweaks.bridge.AudioContextGuard
 import android.app.Instrumentation
 import android.content.Context
 import android.content.pm.ApplicationInfo
@@ -91,6 +92,7 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
         if (!processClaimed.compareAndSet(false, true)) return
 
         log("Xposed handleLoadPackage reached Discord; installing native hooks early")
+        AudioContextGuard.install()
 
         val zygotePath = modulePath?.takeIf { it.isNotBlank() && File(it).isFile }
         val bootstrapScope = HostScopeImpl(zygotePath.orEmpty(), param.appInfo, param.classLoader)
@@ -182,6 +184,7 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
                     after {
                         val app = thisObject as? Application ?: return@after
                         if (app.packageName == ValencedConstants.TARGET_PACKAGE) {
+                            AudioContextGuard.attach(app)
                             notifyContextFallback(app, scope)
                         }
                     }
@@ -198,6 +201,7 @@ class Main : IXposedHookLoadPackage, IXposedHookZygoteInit {
                     before {
                         val app = args.firstOrNull() as? Application ?: return@before
                         if (app.packageName == ValencedConstants.TARGET_PACKAGE) {
+                            AudioContextGuard.attach(app)
                             notifyContextFallback(app, scope)
                         }
                     }

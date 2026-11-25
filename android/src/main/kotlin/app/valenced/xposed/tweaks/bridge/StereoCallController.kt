@@ -44,6 +44,7 @@ internal object StereoCallController {
     private var requestedCall=false
     private var suppressedMode=false
     private var selectedLe=false
+    private var leOwned=false
     private var leRequestedAt=0L
     private var fallbackForCall=false
     private var manager:AudioManager?=null
@@ -55,11 +56,14 @@ internal object StereoCallController {
     private val main=Handler(Looper.getMainLooper())
     private var deferredSco: (() -> Unit)?=null
 
-    private fun active():Boolean = runCatching {
+    private fun pluginAllowed():Boolean = runCatching {
         val cfg=ModuleSettings.current()
-        configured&&modeHook&&HookPolicy.resolve(cfg.enabled,cfg.javascriptEnabled,cfg.safeMode)==HookMode.FULL&&
+        HookPolicy.resolve(cfg.enabled,cfg.javascriptEnabled,cfg.safeMode)==HookMode.FULL&&
             PluginStatesStore.active.isPluginEnabled(ID)&&!PluginStatesStore.active.isPluginEnabled("mxtiy.audiofix")
     }.getOrDefault(false)
+
+    private fun active():Boolean = configured&&modeHook&&pluginAllowed()
+    private fun observeCall():Boolean = pluginAllowed()&&(configured||mediaRouting)
 
     private fun <T> bypass(block:()->T):T {
         val old=reentry.get()
@@ -94,7 +98,7 @@ internal object StereoCallController {
         if(selectedLe&&leDeviceId==target.id&&SystemClock.elapsedRealtime()-leRequestedAt<8000L)return true
         val accepted=runCatching{bypass{a.setCommunicationDevice(target)}}.getOrDefault(false)
         if(accepted){
-            selectedLe=true;leDeviceId=target.id;leRequestedAt=SystemClock.elapsedRealtime()
+            selectedLe=true;leOwned=true;leDeviceId=target.id;leRequestedAt=SystemClock.elapsedRealtime()
             routeNote="le-requested"
         }
         return accepted
@@ -104,14 +108,15 @@ internal object StereoCallController {
         splitStartedAt=0L
         val a=manager
         val mode=suppressedMode
-        val le=selectedLe
+        val le=leOwned
+        val ownedDeviceId=leDeviceId
         val sco=deferredSco
-        suppressedMode=false;selectedLe=false;leDeviceId=0;deferredSco=null
+        suppressedMode=false;selectedLe=false;leOwned=false;leDeviceId=0;deferredSco=null
         fallbackForCall=requestedCall
         routeNote=reason
         if(a==null||!requestedCall||!ordinary(a))return
         runCatching{bypass{
-            if(le&&Build.VERSION.SDK_INT>=31&&a.communicationDevice?.type==AudioDeviceInfo.TYPE_BLE_HEADSET)a.clearCommunicationDevice()
+            if(le&&Build.VERSION.SDK_INT>=31&&a.communicationDevice?.id==ownedDeviceId)a.clearCommunicationDevice()
             if(mode)a.mode=AudioManager.MODE_IN_COMMUNICATION
             sco?.invoke()
         }}.onFailure{routeNote="restore-failed"}
@@ -120,18 +125,20 @@ internal object StereoCallController {
         callGeneration++
         StereoVoiceTracks.restore()
         splitStartedAt=0L
-        if(selectedLe&&Build.VERSION.SDK_INT>=31)runCatching{bypass{
+        if(leOwned&&Build.VERSION.SDK_INT>=31)runCatching{bypass{
             if(a.communicationDevice?.id==leDeviceId)a.clearCommunicationDevice()
         }}
-        requestedCall=false;suppressedMode=false;selectedLe=false;leDeviceId=0;deferredSco=null
+        requestedCall=false;suppressedMode=false;selectedLe=false;leOwned=false;leDeviceId=0;deferredSco=null
         fallbackForCall=false;manager=null;routeNote="idle"
+        val endedGeneration=callGeneration
+        main.post{synchronized(lock){if(callGeneration==endedGeneration&&!requestedCall)publishMedia(false)}}
     }
     private fun reconcile(a:AudioManager){
         if(!requestedCall)return
         if(!ordinary(a)){
             StereoVoiceTracks.restore()
             splitStartedAt=0L
-            suppressedMode=false;selectedLe=false;deferredSco=null;fallbackForCall=true;routeNote="system-call-priority";return
+            suppressedMode=false;selectedLe=false;leOwned=false;deferredSco=null;fallbackForCall=true;routeNote="system-call-priority";return
         }
         if((suppressedMode||selectedLe)&&(!active()||(!fallbackForCall&&path(a)==StereoRoutePolicy.Path.SYSTEM)||
             (selectedLe&&leDevice(a)==null)))restore("system-fallback")
@@ -158,28 +165,52 @@ internal object StereoCallController {
             restore("le-not-selected")
         }
     }
+    /** Native lifecycle fallback; safe even when the JS plugin never started. */
+    fun disableRouting() {
+        synchronized(lock) {
+            configured=false;mediaRouting=false;nativeTrial=false
+            callGeneration++
+            if(requestedCall||suppressedMode||selectedLe)restore("standard-routing")
+            else routeNote="disabled"
+            app?.getSharedPreferences("vexcord_stereo_native",Context.MODE_PRIVATE)?.edit()
+                ?.putBoolean("enabled",false)?.putBoolean("mediaRouting",false)
+                ?.putBoolean("nativeTrial",false)?.apply()
+            publishMedia(false)
+        }
+    }
+
     fun configure(enabled:Boolean,mode:String,media:Boolean=false):Map<String,Any> = synchronized(lock){
-        val trial=mode=="a2dp_native"
-        if(trial!=nativeTrial)restore("profile-changed")
+        val trial=enabled&&mode=="a2dp_native"
+        val p=when(mode){"a2dp","a2dp_native"->StereoRoutePolicy.Preference.A2DP;"le"->StereoRoutePolicy.Preference.LE;else->StereoRoutePolicy.Preference.AUTO}
+        val changed=p!=preference||trial!=nativeTrial
+        // Disable policy before restoring the host route; invalidate queued LE retries.
+        configured=enabled
+        if(!enabled||changed){
+            callGeneration++
+            if(requestedCall||suppressedMode||selectedLe)restore("standard-routing")
+            else routeNote=if(enabled)"idle" else "disabled"
+        }
         nativeTrial=trial
         mediaRouting=media
-        val p=when(mode){"a2dp","a2dp_native"->StereoRoutePolicy.Preference.A2DP;"le"->StereoRoutePolicy.Preference.LE;else->StereoRoutePolicy.Preference.AUTO}
-        if(!enabled||p!=preference)restore("standard-routing")
-        configured=enabled;preference=p
+        preference=p
         app?.getSharedPreferences("vexcord_stereo_native",Context.MODE_PRIVATE)?.edit()
-            ?.putBoolean("enabled",enabled)?.putString("mode",p.name)?.putBoolean("mediaRouting",media)?.putBoolean("nativeTrial",trial)?.apply()
+            ?.putBoolean("enabled",enabled)?.putString("mode",p.name)?.putBoolean("mediaRouting",mediaRouting)?.putBoolean("nativeTrial",trial)?.apply()
+        if(!mediaRouting||!pluginAllowed())publishMedia(false)
         status()
+    }
+    private fun publishMedia(enabled:Boolean){
+        val context=app?:return
+        val uri=android.net.Uri.parse("content://"+BuildConfig.APPLICATION_ID+".settings")
+        runCatching { context.contentResolver.call(uri,"media_route_publish",null,android.os.Bundle().apply { putBoolean("enabled",enabled) }) }
     }
     fun status():Map<String,Any> = synchronized(lock){
         val a=audio()?:return@synchronized mapOf("backend" to installed,"note" to "unavailable")
         return@synchronized runCatching{
             reconcile(a)
-            val mediaEnabled=active()&&requestedCall&&ordinary(a)&&mediaRouting
+            val mediaEnabled=pluginAllowed()&&requestedCall&&ordinary(a)&&mediaRouting
             val uri=android.net.Uri.parse("content://"+BuildConfig.APPLICATION_ID+".settings")
             val context=app
-            runCatching { context?.contentResolver?.call(uri,"media_route_publish",null,android.os.Bundle().apply {
-                putBoolean("enabled",mediaEnabled)
-            }) }
+            publishMedia(mediaEnabled)
             val mediaStatus=runCatching { context?.contentResolver?.call(uri,"media_route_status",null,null)
                 ?.getString("status") }.getOrNull().orEmpty()
             val types=a.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map{it.type}.toSet()
@@ -188,7 +219,8 @@ internal object StereoCallController {
                 "communicationType" to currentType(a),"mode" to a.mode,"preference" to preference.name,
                 "policy" to path(a).name,"suppressedMode" to suppressedMode,"hookHits" to hits.get(),
                 "note" to routeNote,"discordCallHook" to discordCallHook,"mediaRouting" to mediaRouting,
-                "mediaApps" to mediaStatus,"nativeTrial" to nativeTrial)+StereoVoiceTracks.status()
+                "mediaApps" to mediaStatus,"nativeTrial" to nativeTrial,"contextGuard" to AudioContextGuard.isInstalled(),
+                "contextRepairs" to AudioContextGuard.repairCount())+StereoVoiceTracks.status()
         }.getOrElse{mapOf("backend" to installed,"note" to "unavailable")}
     }
     fun install(context:Context,classLoader:ClassLoader){
@@ -218,11 +250,11 @@ internal object StereoCallController {
             }
             modeHook=hook("setMode",Int::class.javaPrimitiveType!!){param,a->
                 val mode=param.args.firstOrNull() as? Int?:return@hook
-                if(mode==AudioManager.MODE_NORMAL){endCall(a);return@hook}
-                if(mode!=AudioManager.MODE_IN_COMMUNICATION||!active()||!ordinary(a))return@hook
+                if(mode==AudioManager.MODE_NORMAL){if(requestedCall||suppressedMode||selectedLe)endCall(a);return@hook}
+                if(mode!=AudioManager.MODE_IN_COMMUNICATION||!observeCall()||!ordinary(a))return@hook
                 if(!requestedCall)fallbackForCall=false
                 requestedCall=true;manager=a
-                if(path(a)==StereoRoutePolicy.Path.A2DP_PHONE_MIC){
+                if(active()&&path(a)==StereoRoutePolicy.Path.A2DP_PHONE_MIC){
                     // Replace Discord's request, not global audio service state.
                     param.args[0]=AudioManager.MODE_NORMAL
                     suppressedMode=true
@@ -267,7 +299,7 @@ internal object StereoCallController {
             }
             if(Build.VERSION.SDK_INT>=31){
                 hook("clearCommunicationDevice"){_,_->
-                    selectedLe=false;leDeviceId=0;deferredSco=null
+                    selectedLe=false;leOwned=false;leDeviceId=0;deferredSco=null
                 }
                 hook("setCommunicationDevice",AudioDeviceInfo::class.java){param,a->
                     val device=param.args.firstOrNull() as? AudioDeviceInfo?:return@hook
@@ -276,7 +308,7 @@ internal object StereoCallController {
                     else if(selectedLe){
                         // The app selected another communication device. Do not
                         // later replay an old Bluetooth request over this choice.
-                        selectedLe=false;leDeviceId=0;deferredSco=null
+                        selectedLe=false;leOwned=false;leDeviceId=0;deferredSco=null
                         fallbackForCall=true;routeNote="system-route-selected"
                     }
                 }
@@ -290,9 +322,10 @@ internal object StereoCallController {
                 XposedBridge.hookMethod(method,object:XC_MethodHook(){
                     override fun beforeHookedMethod(param:MethodHookParam){
                         synchronized(lock){
-                            val a=audio()?:return
                             val on=param.args.firstOrNull() as? Boolean?:return
-                            if(on&&active()&&ordinary(a)){
+                            if(!on||!observeCall())return
+                            val a=audio()?:return
+                            if(ordinary(a)){
                                 if(!requestedCall){fallbackForCall=false;callGeneration++}
                                 requestedCall=true
                                 manager=a
@@ -302,10 +335,11 @@ internal object StereoCallController {
                     override fun afterHookedMethod(param:MethodHookParam){
                         if(param.hasThrowable())return
                         synchronized(lock){
-                            val a=audio()?:return
                             val on=param.args.firstOrNull() as? Boolean?:return
+                            if(!requestedCall&&!suppressedMode&&!selectedLe)return
+                            val a=audio()?:return
                             if(!on){endCall(a);return}
-                            if(!requestedCall||!active())return
+                            if(!active())return
                             val generation=callGeneration
                             // Audio mode and device changes can be asynchronous.
                             // Only retry in the same call, and only if Bluetooth
@@ -333,8 +367,8 @@ internal object StereoCallController {
             // additional backend, not a claim to patch OpenSL ES in C++.
             installed+=StereoVoiceTracks.install{
                 synchronized(lock){
-                    val a=audio()
-                    if(a==null||!requestedCall||!suppressedMode||path(a)!=StereoRoutePolicy.Path.A2DP_PHONE_MIC)
+                    val a=if(active()&&requestedCall&&suppressedMode)audio()else null
+                    if(a==null||path(a)!=StereoRoutePolicy.Path.A2DP_PHONE_MIC)
                         Pair(null,null)
                     else{
                         val out=a.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull{it.type==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP}
@@ -343,13 +377,14 @@ internal object StereoCallController {
                     }
                 }
             }
-            runCatching{
+            // Avoid caching AudioManager before Application.onCreate.
+            main.post { runCatching{
                 audio()?.registerAudioDeviceCallback(object:AudioDeviceCallback(){
                     override fun onAudioDevicesRemoved(removedDevices:Array<out AudioDeviceInfo>){
                         synchronized(lock){runCatching{audio()?.let{reconcile(it)}}}
                     }
                 },Handler(Looper.getMainLooper()))
-            }
+            } }
             Log.i(TAG,"Native audio hooks installed: "+installed+"; mode="+modeHook+"; discord="+discordCallHook)
         }
     }

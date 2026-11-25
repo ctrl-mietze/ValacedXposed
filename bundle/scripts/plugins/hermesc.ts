@@ -43,10 +43,12 @@ export default function hermesCPlugin({
             const argList = ['-emit-binary', ...(flags ?? [])]
 
             const cmd = spawnSync(binPath, argList, {
-                stdio: ['pipe', 'pipe'],
+                stdio: ['pipe', 'pipe', 'pipe'],
+                maxBuffer: 64 * 1024 * 1024,
                 input: file.code,
             })
 
+            if (cmd.error) throw cmd.error
             if (cmd.status !== 0) {
                 if (cmd.stderr.length)
                     throw new Error(

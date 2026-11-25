@@ -2,10 +2,10 @@
   "format": 1,
   "id": "vexcord.stereo-call",
   "name": "Stereo Call",
-  "description": "Discord call lifecycle, LE/A2DP audio routing, optional native trial and independent media app routing with live verification. Vexcord 1.0.33+.",
+  "description": "Safe lifecycle, explicit standard routing, context crash protection (Vexcord 1.0.35+), LE/A2DP and independent media controls.",
   "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
   "icon": "voice_bar_bluetooth",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "dependencies": {
     "valenced.api": {
       "version": ">=1 <2"

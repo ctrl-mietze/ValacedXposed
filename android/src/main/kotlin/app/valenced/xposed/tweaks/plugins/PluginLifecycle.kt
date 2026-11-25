@@ -298,6 +298,12 @@ internal suspend fun disablePlugin(pluginId: String) {
         }
     }
 
+    // Native audio must stop even if a JS plugin's cleanup failed or did not run.
+    if ("vexcord.stereo-call" in toDisable) {
+        runCatching { app.valenced.xposed.tweaks.bridge.StereoCallController.disableRouting() }
+            .onFailure { pluginLog.e("Stereo routing cleanup failed", it) }
+    }
+
     // batchSave can't suspend, so tell JS afterwards.
     for ((id, flags) in written) sendStateToJS(PluginStatesStore.active.id, id, flags)
 
