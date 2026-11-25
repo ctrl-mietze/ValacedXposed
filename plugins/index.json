@@ -115,6 +115,30 @@
           }
         }
       }
+    },
+    "vexcord.volume-maxer": {
+      "name": "Volume Maxer",
+      "description": "Raise individual Discord voice and stream volume sliders to 500% using the original Discord audio conversion. Does not alter microphone, soundboard, or master output.",
+      "author": "Veyra (https://github.com/ctrl-mietze/Vexcord \"Vexcord\")",
+      "icon": "ic_volume_up_24px",
+      "channels": {
+        "latest": "1.0.0"
+      },
+      "versions": {
+        "1.0.0": {
+          "url": "https://raw.githubusercontent.com/ctrl-mietze/Vexcord/main/plugins/pool/vexcord.volume-maxer@1.0.0.zip",
+          "sha256": "edadf3084ee982185831477a0715e9837da129d725381cc74e44e97fa08ae61d",
+          "size": 2784,
+          "dependencies": {
+            "valenced.api": {
+              "version": ">=1 <2"
+            },
+            "discord": {
+              "version": "*"
+            }
+          }
+        }
+      }
     }
   }
 }

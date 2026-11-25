@@ -7,6 +7,7 @@ Official, opt-in extensions for Vexcord 1.0.29 and newer. This is a format-1 rep
 | Plugin | Purpose |
 | --- | --- |
 | [Stereo Call](stereo-call/) | Prefer classic Bluetooth A2DP during Discord voice sessions, while preserving ordinary routing for wired, USB and LE Audio. |
+| [Volume Maxer](volume-maxer/) | Individual voice and stream sliders up to 500%, preserving Discord’s native conversion and keeping master output unchanged. |
 | [BitChord Presence](bitchord-presence/) | Dedicated BitChord media-session connection and a listening activity with optional artwork, album, elapsed time and public track URL. |
 
 The app adds this source once alongside all existing sources. Install and enable each plugin through the normal manager. They are not automatically activated.
