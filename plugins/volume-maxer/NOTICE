@@ -1,0 +1,6 @@
+Volume Maxer 1.1.0, modified Vexcord implementation under GPL-3.0.
+Profile integration and volume synchronization approach inspired by Axonyum's Better Volume for Valenced:
+https://github.com/ApollyxnHashed/Valenced-Plugins/tree/main/plugins/better-volume
+Better Volume credits Zerthox's original MIT-licensed BetterVolume:
+https://github.com/Zerthox/BetterDiscord-Plugins/tree/master/src/BetterVolume
+The Vexcord implementation is modified and not an official upstream release.

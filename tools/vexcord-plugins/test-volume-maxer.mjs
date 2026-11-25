@@ -1,66 +1,57 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import vm from 'node:vm';
-const cleanups=[], observers=[], patches=[], effects=[];
-let componentHook, observedName, lastState;
-function VolumeSlider(){}
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import vm from 'node:vm'
+const id='123456789012345678', second='234567890123456789';
+const children=[], cleanup=[], observers=[], events={}, hooks=[], jsxHooks=[], logs=[], writes=[], sent=[];
+let saved={}, actual=100, pending, profileHook;
+const sliderType=()=>null;
+const el=(type,props={})=>({type,key:props.key??null,props});
 const React={
-  createElement(type,props,...children){return {type,props,children}},
-  useState(value){return [value,v=>{lastState=v}]},
-  useEffect(fn){effects.push(fn)}
+ createElement:(type,props,...kids)=>el(type,{...props,...(kids.length?{children:kids.length===1?kids[0]:kids}:{})}),
+ isValidElement:n=>!!n&&typeof n==='object'&&'type'in n&&'props'in n,
+ cloneElement:(n,p)=>({...n,props:{...n.props,...p}}),
+ useCallback:fn=>fn,useSyncExternalStore:(_,read)=>read(),useState:x=>[x,()=>{}],useEffect:()=>{},useReducer:()=>[0,()=>{}]
 };
-const RN={View:'View',Text:'Text'};
+const store={getLocalVolume:()=>actual,addChangeListener(){},removeChangeListener(){}};
+const dispatcher={dispatch(e){sent.push(e);actual=e.volume;events[e.type]?.(e)}};
+const actions={setLocalVolume(userId,volume,context='default'){dispatcher.dispatch({type:'AUDIO_SET_LOCAL_VOLUME',userId,volume,context});const a=pending([context,userId,{volume}]);writes.push(a[2]);},toggleLocalMute(){}};
+function Inner(p){return el('root',{children:[el('group',{key:'set-volume',children:[el(sliderType,{value:actual,maxValue:200,onChange:n=>actions.setLocalVolume(p.user.id,n)}),el(sliderType,{value:100,maxValue:200,onChange(){}})]}),el('unrelated',{maxValue:200})]})}
+const module={default:p=>el(Inner,p)};
 const valenced={
-  react:{React,ReactNative:RN,jsxRuntime:{insteadJSX(type,hook){assert.equal(type,VolumeSlider);componentHook=hook;return()=>{componentHook=null}}}},
-  modules:{finders:{filters:{withName:name=>name},getModules(name,fn){observedName=name;fn(VolumeSlider);return()=>{}}}}
+ react:{React,ReactNative:{View:'View',Text:'Text',Pressable:'Pressable',TextInput:'TextInput',ScrollView:'ScrollView'},jsxRuntime:{insteadJSX(t,h){jsxHooks.push({t,h});return()=>{}},beforeJSX(t,h){jsxHooks.push({t,h});return()=>{}}}},
+ patcher:{instead(m,k,h){profileHook=h;return()=>{}}},
+ discord:{flux:{Stores:{MediaEngineStore:store}},common:{flux:{Dispatcher:dispatcher}},utils:{modules:{finders:{getModuleWithImportedPath(path,fn){assert.equal(path,'modules/user_profile/native/UserProfileVoiceSettings.tsx');fn(module);return()=>{}}}}}},
+ modules:{finders:{filters:{withName:n=>n},getModules(n,f){return()=>{}}}}
 };
-const api={cleanup:fn=>cleanups.push(fn),vexcord:{
-  modules:{observe(keys,fn){observers.push({keys,fn})}},
-  hooks:{after(target,key,hook){patches.push({target,key,hook})}}
+const api={cleanup:f=>cleanup.push(f),vexcord:{
+ storage:{open:()=>({get:async()=>({overrides:{}}),set:async x=>{saved=x.overrides}})},
+ modules:{observe:(keys,fn)=>observers.push({keys,fn})},hooks:{before:(m,k,f)=>{pending=f}},events:{observe:(e,f)=>events[e]=f}
 }};
-const {default:plugin}=vm.runInNewContext(fs.readFileSync('plugins/volume-maxer/index.js','utf8'),{vexcord:{definePlugin:x=>x},valenced,Set,WeakSet,Math,Number,Promise});
-plugin.start(api);
-assert.equal(observedName,'VolumeSlider');
-const emit=(key,obj)=>observers.find(x=>x.keys.includes(key)).fn(obj);
-emit('amplitudeToPerceptual',{amplitudeToPerceptual:x=>x,perceptualToAmplitude:x=>x});
-emit('intl',{t:{pEAl4b:'stream'},intl:{string:k=>k==='stream'?'Transmisión':null}});
-const calls=[];
-const original={value:100,onValueChange:x=>calls.push(x),style:{margin:8}};
-const jsx=(type,props,key)=>({type,props,key});
-const voice=componentHook([VolumeSlider,original,'set-volume'],jsx);
-assert.notEqual(voice.type,VolumeSlider);
-const wrapped=voice.type(voice.props);
-const slider=wrapped.children[0];
-assert.equal(slider.type,VolumeSlider);
-assert.equal(slider.props.maxVolume,500);
-assert.equal(slider.props.value,100);
-slider.props.onValueChange(500);
-assert.equal(calls.at(-1),500);
-assert.equal(lastState,500);
-assert.equal(wrapped.children[1].children[0],'100% / 500%');
-assert.notEqual(componentHook([VolumeSlider,{...original,accessibilityLabel:'Transmisión'},null],jsx).type,VolumeSlider);
-assert.notEqual(componentHook([VolumeSlider,{...original,accessibilityLabel:'Streamlautstärke'},null],jsx).type,VolumeSlider);
-for(const props of [
-  {...original,accessibilityLabel:'Ausgabelautstärke'},
-  {...original,accessibilityLabel:'Output Volume'},
-  {...original,maxVolume:100,accessibilityLabel:'Streamlautstärke'},
-  {...original,value:NaN},
-  {...original,onValueChange:undefined}
-]) assert.equal(componentHook([VolumeSlider,props,null],jsx).props,props);
-const stream={maximum:200,useValue:function useStreamVolumeSettingValue(){},onValueChange:function onStreamValueSettingValueChange(){}};
-const output={maximum:200,useValue:function useOutputVolumeSettingValue(){},onValueChange(){}};
-emit('maximum',stream);emit('maximum',output);
-assert.equal(stream.maximum,500);
-assert.equal(output.maximum,200);
-emit('createVolumeSlider',{createVolumeSlider(){},createSlider(){},createToggle(){}});
-const future={...stream,maximum:200};
-assert.equal(patches[0].hook(future),future);
-assert.equal(future.maximum,500);
-const unrelated={...output,maximum:100};
-assert.equal(patches[0].hook(unrelated),unrelated);
-assert.equal(unrelated.maximum,100);
-for(const cleanup of cleanups.reverse())cleanup();
-assert.equal(componentHook,null);
-assert.equal(stream.maximum,200);
-assert.equal(future.maximum,200);
-console.log('PASS Volume Maxer: native slider 500%, real callback, translated stream, unrelated sliders unchanged, V2 definitions, cleanup');
+const timers=[];
+const {default:plugin}=vm.runInNewContext(fs.readFileSync('plugins/volume-maxer/index.js','utf8'),{
+ valenced,vexcord:{definePlugin:x=>x},nativeLoggingHook:s=>logs.push(s),
+ setTimeout:f=>{timers.push(f);return timers.length},clearTimeout:()=>{},Promise,Math,Number,Set,WeakMap,WeakSet,Object
+});
+await plugin.start(api)
+const emit=(k,m)=>observers.find(x=>x.keys.includes(k)).fn(m);
+emit('setLocalVolume',actions)
+emit('updatePendingSettings',{updatePendingSettings(){},drainPendingAudioSettings(){},getPendingAudioSettings(){}})
+const outer=profileHook([{user:{id},currentUser:{id:second}}],module.default);
+const patched=outer.type(outer.props);
+const rows=patched.props.children;
+assert.equal(rows[0].props.children[0].props.maxValue,500);
+assert.equal(rows[0].props.children[1].props.maxValue,500);
+assert.equal(rows[2].props.maxValue,200)
+assert.equal(rows[1].type.name,'ExactControls')
+const controls=rows[1].type(rows[1].props);
+const presets=controls.props.children[1].props.children;
+presets.at(-1).props.onPress();
+assert(sent.at(-1).volume>1500 && sent.at(-1).volume<1600);
+assert(Math.abs(writes.at(-1).volume-199.5262315)<0.01)
+assert.equal(saved['default:'+id],sent.at(-1).volume)
+const boost=actual;actual=100;events.USER_SETTINGS_PROTO_UPDATE();timers.at(-1)();assert.equal(actual,boost)
+presets[0].props.onPress();assert.equal(actual,100);assert.equal(Object.keys(saved).length,0)
+const own=profileHook([{user:{id},currentUser:{id}}],module.default)
+assert.equal(own.type,Inner)
+for(const f of cleanup.reverse())f()
+console.log('PASS exact profile patch, both slider limits, 500% audio action, local persistence, sync restoration, stock output, own profile and reset');
